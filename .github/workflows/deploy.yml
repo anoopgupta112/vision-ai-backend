@@ -19,6 +19,6 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            cd /root/deployed_repos/main_dashboard
+            cd /root/deployed_repos/platform-infra
             git pull origin main
             docker compose up --build -d
