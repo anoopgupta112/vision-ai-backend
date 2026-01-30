@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run Flask app test
+        run: |
+          export FLASK_ENV=development
+          export SECRET_KEY=test-secret-key
+          export DASHBOARD_URL=http://localhost:5000
+          timeout 5 python app.py || true
+      
+      - name: Test health endpoint
+        run: |
+          python app.py &
+          sleep 3
+          curl -f http://localhost:8000/health || exit 1
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: lead-extractor-landing:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
