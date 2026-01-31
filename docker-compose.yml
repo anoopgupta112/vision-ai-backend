@@ -2,18 +2,19 @@ services:
   web:
     build: .
     container_name: lead_extractor_landing
+    restart: unless-stopped
 
-    # REMOVE public port exposure:
-    # ports:
-    #   - "8000:8000"
+    # Expose ONLY to localhost (nginx will proxy to this)
+    ports:
+      - "127.0.0.1:8000:8000"
 
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
       - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
       - DASHBOARD_URL=${DASHBOARD_URL:-https://lead.visionaitech.cloud}
+
     env_file:
       - .env
-    restart: unless-stopped
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -21,18 +22,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-    networks:
-      - web
-
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.landing.rule=Host(`visionaitech.cloud`)
-      - traefik.http.routers.landing.entrypoints=websecure
-      - traefik.http.routers.landing.tls=true
-      - traefik.http.routers.landing.tls.certresolver=letsencrypt
-      - traefik.http.services.landing.loadbalancer.server.port=8000
-
-networks:
-  web:
-    external: true
