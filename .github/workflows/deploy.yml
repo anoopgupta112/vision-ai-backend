@@ -19,6 +19,25 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
+            set -euxo pipefail
+          
             cd /root/deployed_repos/platform-infra
-            git pull origin main
-            docker compose up --build -d
+          
+            echo "== git status =="
+            git status || true
+          
+            echo "== current branch =="
+            git branch -vv || true
+          
+            echo "== remotes =="
+            git remote -v || true
+          
+            echo "== fetch =="
+            git fetch origin main
+          
+            echo "== reset hard to origin/main =="
+            git reset --hard origin/main
+          
+            echo "== docker rebuild =="
+            docker compose up -d --build
+
