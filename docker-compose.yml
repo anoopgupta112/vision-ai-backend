@@ -10,8 +10,8 @@ services:
       - mongodb_data:/data/db
     # Port removed - only accessible within Docker network
     # If you need to access MongoDB from host, uncomment:
-    # ports:
-    #   - "127.0.0.1:27017:27017"
+    ports:
+      - "127.0.0.1:27017:27017"
     command: ["mongod", "--quiet", "--logpath", "/dev/null"]
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
