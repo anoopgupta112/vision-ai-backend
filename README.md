@@ -1,231 +1,154 @@
-# Lead Extractor Landing Page
+# Lead Generation Platform - Backend
 
-A professional, modern landing page for the Lead Extractor application built with Flask backend and responsive frontend design.
+Flask-based backend API for the Lead Generation platform with MongoDB, Redis, and background job processing.
 
 ## Features
 
-- **Modern Design**: Gradient-based color scheme with smooth animations
-- **Fully Responsive**: Mobile-first design that works on all devices
-- **Flask Backend**: Clean, modular Flask application
-- **SEO Optimized**: Proper meta tags and semantic HTML
-- **Premium UI**: Glassmorphism effects, hover animations, and micro-interactions
-- **Custom Error Pages**: Beautiful 404 and 500 error pages
+- 🔐 **Authentication**: JWT-based user authentication
+- 🎯 **Lead Generation**: Google Maps scraping with email extraction
+- 💳 **Credits System**: User credits and transaction ledger
+- 👨‍💼 **Admin Dashboard**: User management and job monitoring
+- 🔄 **Background Jobs**: Redis Queue for async lead extraction
+- 🐳 **Docker**: Fully containerized with Docker Compose
 
-## Tech Stack
+## Quick Start
 
-- **Backend**: Flask 3.0
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **Fonts**: Google Fonts (Inter, Poppins)
-- **Deployment**: Gunicorn ready for production
-
-## Setup Instructions
-
-### Prerequisites
-
-- Python 3.9+
-- pip
-
-### Installation
-
-1. **Clone and Navigate**
-   ```bash
-   cd /Users/anoopchandra/repositories/main_dashboard
-   ```
-
-2. **Create Virtual Environment**
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and update:
-   - `SECRET_KEY`: Generate a secure random key
-   - `DASHBOARD_URL`: URL of your dashboard (e.g., `https://app.leadextractor.com`)
-
-5. **Run Development Server**
-   ```bash
-   python app.py
-   ```
-   
-   The application will be available at `http://localhost:8000`
-
-### Production Deployment
-
-For production, use Gunicorn:
+### Local Development
 
 ```bash
-gunicorn --bind 0.0.0.0:8000 --workers 4 app:create_app()
-```
+# Clone repository
+git clone https://github.com/yourusername/main_dashboard.git
+cd main_dashboard
 
-Or with environment variables:
+# Copy environment file
+cp .env.example .env
 
-```bash
-export FLASK_ENV=production
-gunicorn --bind 0.0.0.0:8000 --workers 4 app:create_app()
-```
-
-### Docker Deployment
-
-**Build and Run**
-
-```bash
-# Build the Docker image
-docker-compose build
-
-# Start the container
+# Start services
 docker-compose up -d
 
-# View logs
-docker-compose logs -f
-
-# Stop the container
-docker-compose down
-```
-
-**Production with Custom Environment**
-
-```bash
-# Set environment variables in .env file
-export FLASK_ENV=production
-export SECRET_KEY=your-production-secret-key
-export DASHBOARD_URL=https://app.yourdomain.com
-
-# Start with environment variables
-docker-compose up -d
-```
-
-**Health Check**
-
-The container includes health checks on the `/health` endpoint:
-```bash
-# Check container health
-docker-compose ps
-
-# Manual health check
+# Check health
 curl http://localhost:8000/health
+```
+
+### Environment Variables
+
+Create `.env` file:
+
+```env
+FLASK_ENV=development
+SECRET_KEY=your-secret-key-change-this
+MONGODB_URI=mongodb://mongo:27017/lead_gen_dev
+REDIS_URL=redis://redis:6379/0
+FRONTEND_URL=http://localhost:5173
 ```
 
 ## Project Structure
 
 ```
-main_dashboard/
-├── app.py                 # Main Flask application
-├── config.py             # Configuration management
-├── requirements.txt      # Python dependencies
-├── .env.example         # Environment variables template
-├── .gitignore          # Git ignore rules
-├── static/
-│   └── css/
-│       └── style.css   # All styling
-└── templates/
-    ├── base.html       # Base template
-    ├── index.html      # Landing page
-    ├── 404.html        # 404 error page
-    └── 500.html        # 500 error page
+app/
+├── core/              # Shared: config, database, middleware
+├── auth/              # Authentication (login, register)
+├── lead_gen/          # Lead generation product
+│   ├── jobs/          # Job management & scraping
+│   ├── leads/         # Lead storage & export
+│   └── credits/       # Credits system
+├── admin/             # Admin APIs (users, jobs, stats)
+└── payments/          # Payments (placeholder)
 ```
-
-## Configuration
-
-### Environment Variables
-
-- `FLASK_ENV`: Set to `development` or `production`
-- `SECRET_KEY`: Flask secret key for sessions
-- `DASHBOARD_URL`: URL of the dashboard application
-
-### Customization
-
-**Update Dashboard URL**: Edit `.env` file and change `DASHBOARD_URL`
-
-**Change Colors**: Edit `static/css/style.css` and modify CSS variables in `:root`
-
-**Update Content**: Edit `templates/index.html` to change text, features, pricing, etc.
-
-## Features Overview
-
-### Landing Page Sections
-
-1. **Navigation Bar**
-   - Fixed header with smooth scroll
-   - Mobile-responsive hamburger menu
-   - Quick access to dashboard
-
-2. **Hero Section**
-   - Eye-catching headline with gradient text
-   - Call-to-action buttons
-   - Key statistics display
-
-3. **Features Section**
-   - 6 feature cards with icons
-   - Hover animations
-   - Grid layout (responsive)
-
-4. **How It Works**
-   - 4-step process visualization
-   - Numbered step cards
-   - Clear workflow explanation
-
-5. **Pricing Section**
-   - 3 tier pricing cards
-   - Featured plan highlighting
-   - Clear feature lists
-
-6. **Call-to-Action**
-   - Final conversion section
-   - Dashboard access button
-
-7. **Footer**
-   - Product, support, and legal links
-   - Multi-column layout
-   - Copyright information
-
-### Design Highlights
-
-- **Color Scheme**: Purple/blue gradients with vibrant accents
-- **Typography**: Inter (body), Poppins (headings)
-- **Animations**: Fade-in effects, smooth transitions, hover states
-- **Responsive**: Breakpoints at 768px (mobile) and 1024px (tablet)
 
 ## API Endpoints
 
-- `GET /` - Landing page
-- `GET /health` - Health check endpoint (returns JSON)
+| Module | Prefix | Description |
+|--------|--------|-------------|
+| Auth | `/api/auth` | Login, register, profile |
+| Lead Gen | `/api/lead_gen` | Jobs, leads, credits |
+| Admin | `/api/admin` | User management, monitoring |
 
-## Error Handling
+See [API.md](API.md) for full documentation.
 
-The application includes custom error handlers for:
-- 404 Not Found
-- 500 Internal Server Error
-- General exceptions (logged and displayed as 500)
+## Services
 
-## Browser Compatibility
+- **Backend** (Flask): `http://localhost:8000`
+- **Worker** (RQ): Background job processor
+- **MongoDB**: Database on port `27017`
+- **Redis**: Queue on port `6379`
 
-- Chrome (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
-- Mobile browsers (iOS Safari, Chrome Mobile)
+## Development
 
-## Performance
+```bash
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f worker
 
-- Lightweight CSS (no frameworks)
-- Optimized fonts loading
-- Minimal JavaScript
-- Fast page load times
+# Restart services
+docker-compose restart backend worker
+
+# Rebuild after code changes
+docker-compose up -d --build
+
+# Create admin user
+docker-compose exec backend python create_admin_user.py
+```
+
+## Deployment
+
+Automated deployment via GitHub Actions on push to `main` branch.
+
+See [.github/README.md](.github/README.md) for deployment setup.
+
+### Quick Deploy
+
+1. **Setup server** (one-time):
+   ```bash
+   cd /root/deployed_repos
+   git clone https://github.com/yourusername/main_dashboard.git
+   cd main_dashboard
+   cp .env.example .env
+   # Edit .env with production values
+   docker-compose up -d --build
+   ```
+
+2. **Configure GitHub Secrets**:
+   - `SSH_HOST` - Server IP
+   - `SSH_USER` - SSH username
+   - `SSH_KEY` - Private SSH key
+
+3. **Deploy**:
+   ```bash
+   git push origin main
+   ```
+
+## Testing
+
+```bash
+# Run tests
+docker-compose exec backend python -m pytest
+
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Test authentication
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password"}'
+```
+
+## Adding New Modules
+
+1. Create folder: `app/your_module/`
+2. Add `model.py` (database operations)
+3. Add `pipeline.py` (business logic)
+4. Add `routes.py` or `views.py` (API endpoints)
+5. Register blueprint in `app/__init__.py`
+
+## Tech Stack
+
+- **Framework**: Flask 3.0
+- **Database**: MongoDB
+- **Queue**: Redis + RQ
+- **Scraping**: Playwright
+- **Container**: Docker + Docker Compose
 
 ## License
 
-Proprietary - All rights reserved
-
-## Support
-
-For issues or questions, contact the development team or refer to the Lead Extractor dashboard documentation.
+MIT

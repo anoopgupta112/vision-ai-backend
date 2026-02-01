@@ -1,24 +1,90 @@
 services:
-  web:
-    build: .
-    container_name: lead_extractor_landing
+  mongodb:
+    image: mongo:7
+    container_name: platform_mongodb
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+    volumes:
+      - mongodb_data:/data/db
+    # Port removed - only accessible within Docker network
+    # If you need to access MongoDB from host, uncomment:
+    # ports:
+    #   - "127.0.0.1:27017:27017"
+    command: ["mongod", "--quiet", "--logpath", "/dev/null"]
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_network
 
-    # Expose ONLY to localhost (nginx will proxy to this)
+  redis:
+    image: redis:7-alpine
+    container_name: platform_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_network
+
+  api:
+    build: .
+    container_name: platform_api
+    restart: unless-stopped
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      - MONGODB_DATABASE=${MONGODB_DATABASE:-platform_db}
+      - REDIS_URL=redis://redis:6379/0
+      - STRIPE_PUBLIC_KEY=${STRIPE_PUBLIC_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - MAX_LEADS_PER_JOB=${MAX_LEADS_PER_JOB:-500}
     ports:
       - "127.0.0.1:8000:8000"
-
-    environment:
-      - FLASK_ENV=${FLASK_ENV:-production}
-      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
-      - DASHBOARD_URL=${DASHBOARD_URL:-https://lead.visionaitech.cloud}
-
-    env_file:
-      - .env
-
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+    networks:
+      - platform_network
+
+  worker:
+    build: .
+    container_name: platform_worker
+    restart: unless-stopped
+    command: python worker.py
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      - MONGODB_DATABASE=${MONGODB_DATABASE:-platform_db}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - platform_network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  platform_network:
+    driver: bridge

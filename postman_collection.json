@@ -1,0 +1,627 @@
+{
+    "info": {
+        "name": "Platform API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000"
+        },
+        {
+            "key": "token",
+            "value": ""
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Register",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "register"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.token) {",
+                                    "    pm.collectionVariables.set('token', jsonData.token);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Me",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "me"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Profile",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/profile",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "profile"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Profile",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"newemail@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/profile",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "profile"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Lead Gen - Jobs",
+            "item": [
+                {
+                    "name": "Create Job",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"restaurants in new york\",\n  \"limit\": 50\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/jobs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "jobs"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "List Jobs",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/jobs?limit=50&skip=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "jobs"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50"
+                                },
+                                {
+                                    "key": "skip",
+                                    "value": "0"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Job",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/jobs/:job_id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "jobs",
+                                ":job_id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "job_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Cancel Job",
+                    "request": {
+                        "method": "DELETE",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/jobs/:job_id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "jobs",
+                                ":job_id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "job_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Lead Gen - Leads",
+            "item": [
+                {
+                    "name": "Get Leads by Job",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/leads/job/:job_id?limit=1000&skip=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "leads",
+                                "job",
+                                ":job_id"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "1000"
+                                },
+                                {
+                                    "key": "skip",
+                                    "value": "0"
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "job_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Download CSV",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/leads/job/:job_id/download",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "leads",
+                                "job",
+                                ":job_id",
+                                "download"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "job_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Lead Gen - Credits",
+            "item": [
+                {
+                    "name": "Get Balance",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/credits",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "credits"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get History",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/lead_gen/credits/history?limit=50&skip=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "lead_gen",
+                                "credits",
+                                "history"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50"
+                                },
+                                {
+                                    "key": "skip",
+                                    "value": "0"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Admin",
+            "item": [
+                {
+                    "name": "List Users",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users?limit=100&skip=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "100"
+                                },
+                                {
+                                    "key": "skip",
+                                    "value": "0"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get User",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users/:user_id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users",
+                                ":user_id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "user_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update User",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"is_admin\": true,\n  \"is_active\": true\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users/:user_id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users",
+                                ":user_id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "user_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete User",
+                    "request": {
+                        "method": "DELETE",
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users/:user_id",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users",
+                                ":user_id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "user_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Adjust Credits (Add)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"amount\": 100,\n  \"note\": \"Bonus credits\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users/:user_id/credits",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users",
+                                ":user_id",
+                                "credits"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "user_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Adjust Credits (Deduct)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"amount\": -50,\n  \"note\": \"Correction\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/users/:user_id/credits",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "users",
+                                ":user_id",
+                                "credits"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "user_id",
+                                    "value": ""
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Stats",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/api/admin/stats",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "stats"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Health",
+            "item": [
+                {
+                    "name": "Root",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                ""
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/health",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

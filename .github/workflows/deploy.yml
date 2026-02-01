@@ -1,4 +1,4 @@
-name: Deploy Landing Page
+name: Deploy Backend
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           script: |
             set -euxo pipefail
           
-            cd /root/deployed_repos/platform-infra
+            cd /root/deployed_repos/main_dashboard
           
             echo "== git status =="
             git status || true
@@ -39,5 +39,9 @@ jobs:
             git reset --hard origin/main
           
             echo "== docker rebuild =="
+            docker compose down
             docker compose up -d --build
+            
+            echo "== deployment complete =="
+            docker compose ps
 
