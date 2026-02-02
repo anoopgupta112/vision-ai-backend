@@ -21,7 +21,7 @@ jobs:
           script: |
             set -euxo pipefail
           
-            cd /root/deployed_repos/main_dashboard
+            cd /root/deployed_repos/vision-ai-backend
           
             echo "== git status =="
             git status || true
