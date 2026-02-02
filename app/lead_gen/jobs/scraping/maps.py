@@ -8,6 +8,7 @@ from app.lead_gen.leads import model as leads_model
 from app.lead_gen.credits import pipeline as credits_pipeline
 from app.lead_gen.jobs.scraping.emails import EmailExtractor
 from app.lead_gen.jobs.scraping.normalize import normalize_url, normalize_phone
+from app.lead_gen.jobs.scraping.concurrency import LeadProcessor
 
 class MapsScraper:
     def __init__(self, job_id):
@@ -20,6 +21,9 @@ class MapsScraper:
             return
 
         print(f"MapsScraper starting for job {self.job_id}")
+        
+        # Initialize thread processor
+        self.processor = LeadProcessor(use_threads=True, max_threads=5)
 
         with sync_playwright() as p:
             is_macos = sys.platform == 'darwin'
@@ -118,6 +122,33 @@ class MapsScraper:
                 traceback.print_exc()
             finally:
                 browser.close()
+                self.processor.shutdown()
+
+    def process_lead_background(self, data):
+        """Background task to extract email and save lead"""
+        try:
+            name = data['name']
+            phone = data['phone']
+            website = data['website']
+            address = data['address']
+            google_url = data['google_url']
+            
+            norm_phone = normalize_phone(phone)
+            norm_web = normalize_url(website)
+            
+            if not norm_phone and not norm_web:
+                return
+                
+            email = None
+            if norm_web:
+                try:
+                    email = self.email_extractor.extract(norm_web)
+                except: 
+                    pass
+                
+            self.save_lead(name, norm_phone, norm_web, email, address, google_url)
+        except Exception as e:
+            print(f"Background processing failed: {e}")
 
     def extract_details(self, page, google_url):
         try:
@@ -181,20 +212,17 @@ class MapsScraper:
         except: 
             pass
 
-        norm_phone = normalize_phone(phone)
-        norm_web = normalize_url(website)
+        # Prepare data for background processing
+        data = {
+            'name': name,
+            'phone': phone,
+            'website': website,
+            'address': address,
+            'google_url': google_url
+        }
         
-        if not norm_phone and not norm_web:
-            return
-            
-        email = None
-        if norm_web:
-            try:
-                email = self.email_extractor.extract(norm_web)
-            except: 
-                pass
-            
-        self.save_lead(name, norm_phone, norm_web, email, address, google_url)
+        # Submit to thread pool
+        self.processor.submit_lead(data, self.process_lead_background)
 
     def save_lead(self, name, phone, website, email, address, maps_url):
         try:

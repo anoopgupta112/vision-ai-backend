@@ -20,7 +20,7 @@ class EmailExtractor:
             
         emails = set()
         queue = [(start_url, 0)]
-        self.visited = {start_url}
+        visited = {start_url}
         pages_crawled = 0
 
         while queue and pages_crawled < self.max_pages:
@@ -61,8 +61,8 @@ class EmailExtractor:
                         is_contact = any(k in link_text for k in CONTACT_KEYWORDS) or \
                                      any(k in link_href_lower for k in CONTACT_KEYWORDS)
                                      
-                        if is_contact and full_url not in self.visited:
-                            self.visited.add(full_url)
+                        if is_contact and full_url not in visited:
+                            visited.add(full_url)
                             queue.append((full_url, depth + 1))
                             
             except Exception as e:
