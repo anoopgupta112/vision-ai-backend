@@ -126,6 +126,8 @@ class MapsScraper:
 
     def process_lead_background(self, data):
         """Background task to extract email and save lead"""
+        import threading
+        t_name = threading.current_thread().name
         try:
             name = data['name']
             phone = data['phone']
@@ -147,8 +149,9 @@ class MapsScraper:
                     pass
                 
             self.save_lead(name, norm_phone, norm_web, email, address, google_url)
+            print(f"[{t_name}] Processed lead: {name}")
         except Exception as e:
-            print(f"Background processing failed: {e}")
+            print(f"[{t_name}] Background processing failed: {e}")
 
     def extract_details(self, page, google_url):
         try:
