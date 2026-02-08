@@ -25,6 +25,9 @@ class MapsScraper:
         # Initialize thread processor
         # Increased to 10 threads for higher speed
         self.processor = LeadProcessor(use_threads=True, max_threads=10)
+        
+        # Track last activity for stagnation check
+        self.last_activity_time = time.time()
 
         with sync_playwright() as p:
             is_macos = sys.platform == 'darwin'
@@ -61,8 +64,14 @@ class MapsScraper:
                 
                 MAX_ITER = 100 
                 iter_count = 0
+                STAGNATION_LIMIT = 120 # 2 minutes
                 
                 while job['leads_delivered'] < job['leads_requested'] and iter_count < MAX_ITER:
+                    # Check for stagnation
+                    if time.time() - self.last_activity_time > STAGNATION_LIMIT:
+                        print(f"Stopping job {self.job_id} due to stagnation (no new leads for {STAGNATION_LIMIT}s)")
+                        break
+
                     iter_count += 1
                     
                     links = page.locator(f'{feed_selector} > div > div a[href*="/maps/place/"]').all()
@@ -255,6 +264,9 @@ class MapsScraper:
             
             # Update job progress
             jobs_model.update_progress(self.job_id, job['leads_delivered'] + 1)
+            
+            # Update activity timestamp
+            self.last_activity_time = time.time()
             
             print(f"Saved lead: {name}")
             
