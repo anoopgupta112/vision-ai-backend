@@ -23,7 +23,8 @@ class MapsScraper:
         print(f"MapsScraper starting for job {self.job_id}")
         
         # Initialize thread processor
-        self.processor = LeadProcessor(use_threads=True, max_threads=5)
+        # Increased to 10 threads for higher speed
+        self.processor = LeadProcessor(use_threads=True, max_threads=10)
 
         with sync_playwright() as p:
             is_macos = sys.platform == 'darwin'
@@ -232,7 +233,12 @@ class MapsScraper:
             job = jobs_model.find_by_id(self.job_id)
             if not job:
                 return
-                
+            
+            # Prevent over-delivery due to race conditions
+            if job.get('leads_delivered', 0) >= job.get('leads_requested', 0):
+                print(f"Skipping save for {name}: Limit reached.")
+                return
+
             user_id = str(job['user_id'])
             
             # Save lead
