@@ -75,3 +75,27 @@ def list_users(limit=100, skip=0):
 def count_users():
     users = get_collection(COLLECTION)
     return users.count_documents({})
+
+def create_user_from_pending(email, password_hash, phone=None, email_verified=True):
+    """
+    Create a user from pending registration data.
+    Used after email verification to create the actual user.
+    The password is already hashed.
+    """
+    users = get_collection(COLLECTION)
+    user_doc = {
+        'email': email,
+        'phone': phone,
+        'password_hash': password_hash,
+        'email_verified': email_verified,
+        'phone_verified': False,
+        'is_admin': False,
+        'is_active': True,
+        'credits': 100,  # Free credits for new users
+        'created_at': datetime.utcnow(),
+        'updated_at': datetime.utcnow()
+    }
+    result = users.insert_one(user_doc)
+    user_doc['_id'] = result.inserted_id
+    return user_doc
+
