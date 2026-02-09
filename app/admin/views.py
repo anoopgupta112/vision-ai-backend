@@ -4,6 +4,7 @@ from app.core.database import get_collection
 from app.core.exceptions import NotFoundError, ValidationError
 from app.auth import models as auth_models
 from app.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
+from app.lead_gen import credit_requests
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -153,4 +154,88 @@ def list_all_jobs():
     return jsonify({
         'jobs': result,
         'total': total
+    }), 200
+
+# Credit Request Management
+@bp.route('/credit-requests', methods=['GET'])
+@auth_required
+@admin_required
+def list_credit_requests():
+    """Get all pending credit requests"""
+    limit = request.args.get('limit', 100, type=int)
+    skip = request.args.get('skip', 0, type=int)
+    
+    requests = credit_requests.get_pending_requests(limit, skip)
+    pending_count = credit_requests.count_pending()
+    
+    # Get user emails
+    users_coll = get_collection('users')
+    result = []
+    for req in requests:
+        user = users_coll.find_one({'_id': req['user_id']})
+        result.append(credit_requests.to_response(req, user['email'] if user else 'Unknown'))
+    
+    return jsonify({
+        'requests': result,
+        'pending_count': pending_count
+    }), 200
+
+@bp.route('/credit-requests/<request_id>/approve', methods=['POST'])
+@auth_required
+@admin_required
+def approve_credit_request(request_id):
+    """Approve a credit request and add credits to user"""
+    admin = get_current_user()
+    data = request.get_json() or {}
+    admin_note = data.get('note', 'Approved by admin')
+    
+    # Get request first
+    req = credit_requests.get_request_by_id(request_id)
+    if not req:
+        return jsonify({'error': 'Credit request not found'}), 404
+    
+    if req['status'] != credit_requests.STATUS_PENDING:
+        return jsonify({'error': 'Request already processed'}), 400
+    
+    # Approve request
+    updated = credit_requests.approve_request(request_id, str(admin['_id']), admin_note)
+    
+    # Add credits to user
+    credits_pipeline.add_credits(
+        str(req['user_id']),
+        req['amount'],
+        note=f"Credit request approved: {admin_note}"
+    )
+    
+    # Get user email for response
+    user = auth_models.find_user_by_id(req['user_id'])
+    
+    return jsonify({
+        'message': f"{req['amount']} credits added to user",
+        'request': credit_requests.to_response(updated, user['email'] if user else None)
+    }), 200
+
+@bp.route('/credit-requests/<request_id>/reject', methods=['POST'])
+@auth_required
+@admin_required
+def reject_credit_request(request_id):
+    """Reject a credit request"""
+    admin = get_current_user()
+    data = request.get_json() or {}
+    admin_note = data.get('note', 'Rejected by admin')
+    
+    req = credit_requests.get_request_by_id(request_id)
+    if not req:
+        return jsonify({'error': 'Credit request not found'}), 404
+    
+    if req['status'] != credit_requests.STATUS_PENDING:
+        return jsonify({'error': 'Request already processed'}), 400
+    
+    updated = credit_requests.reject_request(request_id, str(admin['_id']), admin_note)
+    
+    user = auth_models.find_user_by_id(req['user_id'])
+    
+    return jsonify({
+        'message': 'Credit request rejected',
+        'request': credit_requests.to_response(updated, user['email'] if user else None)
     }), 200
