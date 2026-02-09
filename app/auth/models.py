@@ -5,10 +5,13 @@ from app.core.database import get_collection
 
 COLLECTION = 'users'
 
-def create_user_doc(email, password_hash):
+def create_user_doc(email, password_hash, phone=None):
     return {
         'email': email,
+        'phone': phone,
         'password_hash': password_hash,
+        'email_verified': False,
+        'phone_verified': False,
         'is_admin': False,
         'is_active': True,
         'created_at': datetime.utcnow(),
@@ -21,15 +24,18 @@ def to_response(user_doc):
     return {
         'id': str(user_doc['_id']),
         'email': user_doc['email'],
+        'phone': user_doc.get('phone'),
+        'email_verified': user_doc.get('email_verified', False),
+        'phone_verified': user_doc.get('phone_verified', False),
         'is_admin': user_doc.get('is_admin', False),
         'is_active': user_doc.get('is_active', True),
         'created_at': user_doc['created_at'].isoformat() if user_doc.get('created_at') else None
     }
 
-def create_user(email, password):
+def create_user(email, password, phone=None):
     users = get_collection(COLLECTION)
     password_hash = generate_password_hash(password, method='pbkdf2:sha256')
-    user_doc = create_user_doc(email, password_hash)
+    user_doc = create_user_doc(email, password_hash, phone)
     result = users.insert_one(user_doc)
     user_doc['_id'] = result.inserted_id
     return user_doc

@@ -13,6 +13,7 @@ def register():
     
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
+    phone = data.get('phone', '').strip()
     
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400
@@ -20,9 +21,49 @@ def register():
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
     
+    if phone and len(phone) < 10:
+        return jsonify({'error': 'Please enter a valid phone number'}), 400
+    
     try:
-        result = services.register_user(email, password)
+        result = services.register_user(email, password, phone if phone else None)
         return jsonify(result), 201
+    except ValidationError as e:
+        return jsonify({'error': e.message}), e.status_code
+
+@bp.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify email OTP and complete registration"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    email = data.get('email', '').strip().lower()
+    code = data.get('code', '').strip()
+    
+    if not email or not code:
+        return jsonify({'error': 'Email and OTP code are required'}), 400
+    
+    try:
+        result = services.verify_email_otp(email, code)
+        return jsonify(result), 200
+    except ValidationError as e:
+        return jsonify({'error': e.message}), e.status_code
+
+@bp.route('/resend-otp', methods=['POST'])
+def resend_otp():
+    """Resend OTP to email"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    email = data.get('email', '').strip().lower()
+    
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    
+    try:
+        result = services.resend_otp(email)
+        return jsonify(result), 200
     except ValidationError as e:
         return jsonify({'error': e.message}), e.status_code
 
