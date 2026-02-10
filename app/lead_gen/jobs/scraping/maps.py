@@ -28,12 +28,14 @@ class MapsScraper:
 
         print(f"MapsScraper starting for job {self.job_id}")
         
-        # Extract location from query for filtering (e.g. "digital marketing in delhi" → "delhi")
+        # Extract location from query for filtering (e.g. "digital marketing in delhi, india" → ["delhi", "india"])
         query_text = job.get('query_text', '')
-        self.search_location = None
+        self.search_location_parts = []
         if ' in ' in query_text.lower():
-            self.search_location = query_text.lower().split(' in ')[-1].strip()
-            print(f"📍 Location filter active: '{self.search_location}'")
+            raw_location = query_text.lower().split(' in ')[-1].strip()
+            # Split by comma to get individual location parts (city, state, country)
+            self.search_location_parts = [part.strip() for part in raw_location.split(',') if part.strip()]
+            print(f"📍 Location filter active: {self.search_location_parts}")
         
         # Initialize thread processor
         # Increased to 10 threads for higher speed
@@ -170,9 +172,10 @@ class MapsScraper:
                 return
             
             # Location filter: skip leads from other cities
-            if self.search_location and address:
+            if self.search_location_parts and address:
                 addr_lower = address.lower()
-                if self.search_location not in addr_lower:
+                # Check if ANY location part (city/state/country) appears in the address
+                if not any(part in addr_lower for part in self.search_location_parts):
                     print(f"[{t_name}] Skipping out-of-location lead: {name} (address: {address})")
                     return
             
