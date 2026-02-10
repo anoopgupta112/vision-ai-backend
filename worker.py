@@ -35,14 +35,43 @@ def process_extraction_job(job_id):
         # Update job status to done
         jobs_model.update_status(job_id, jobs_model.STATUS_DONE)
         
-        # Get final count
+        # Get final count and refund unused credits
         job = jobs_model.find_by_id(job_id)
-        return {'leads_delivered': job['leads_delivered']}
+        leads_delivered = job.get('leads_delivered', 0)
+        leads_requested = job.get('leads_requested', 0)
+        unused = leads_requested - leads_delivered
+        
+        if unused > 0:
+            user_id = str(job['user_id'])
+            credits_pipeline.add_credits(
+                user_id, unused,
+                reason='refund',
+                note=f'Refund for job {job_id}: {unused} unused credits ({leads_delivered}/{leads_requested} leads delivered)'
+            )
+            print(f"💰 Refunded {unused} credits to user {user_id} for job {job_id}")
+        
+        return {'leads_delivered': leads_delivered}
         
     except Exception as e:
         error_msg = str(e)
         print(f"Job {job_id} failed: {error_msg}")
         jobs_model.update_status(job_id, jobs_model.STATUS_FAILED, error_msg)
+        
+        # Refund ALL credits on job failure
+        job = jobs_model.find_by_id(job_id)
+        if job:
+            leads_delivered = job.get('leads_delivered', 0)
+            leads_requested = job.get('leads_requested', 0)
+            refund_amount = leads_requested - leads_delivered
+            if refund_amount > 0:
+                user_id = str(job['user_id'])
+                credits_pipeline.add_credits(
+                    user_id, refund_amount,
+                    reason='refund',
+                    note=f'Refund for failed job {job_id}: {refund_amount} credits'
+                )
+                print(f"💰 Refunded {refund_amount} credits to user {user_id} (job failed)")
+        
         return {'error': error_msg}
 
 if __name__ == '__main__':
