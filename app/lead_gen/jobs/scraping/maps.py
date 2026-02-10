@@ -3,6 +3,7 @@ import time
 import sys
 import traceback
 from bson import ObjectId
+from app.core.database import get_collection
 from app.lead_gen.jobs import model as jobs_model
 from app.lead_gen.leads import model as leads_model
 from app.lead_gen.credits import pipeline as credits_pipeline
@@ -10,10 +11,15 @@ from app.lead_gen.jobs.scraping.emails import EmailExtractor
 from app.lead_gen.jobs.scraping.normalize import normalize_url, normalize_phone
 from app.lead_gen.jobs.scraping.concurrency import LeadProcessor
 
+import threading
+
 class MapsScraper:
     def __init__(self, job_id):
         self.job_id = job_id
         self.email_extractor = EmailExtractor()
+        # Phone-based deduplication
+        self.seen_phones = set()
+        self._phone_lock = threading.Lock()
 
     def run(self):
         job = jobs_model.find_by_id(self.job_id)
@@ -21,6 +27,13 @@ class MapsScraper:
             return
 
         print(f"MapsScraper starting for job {self.job_id}")
+        
+        # Extract location from query for filtering (e.g. "digital marketing in delhi" → "delhi")
+        query_text = job.get('query_text', '')
+        self.search_location = None
+        if ' in ' in query_text.lower():
+            self.search_location = query_text.lower().split(' in ')[-1].strip()
+            print(f"📍 Location filter active: '{self.search_location}'")
         
         # Initialize thread processor
         # Increased to 10 threads for higher speed
@@ -150,6 +163,26 @@ class MapsScraper:
             
             if not norm_phone and not norm_web:
                 return
+            
+            # Filter out "Sponsored" entries with no real name
+            if name.strip().lower() == 'sponsored':
+                print(f"[{t_name}] Skipping sponsored listing (no real name)")
+                return
+            
+            # Location filter: skip leads from other cities
+            if self.search_location and address:
+                addr_lower = address.lower()
+                if self.search_location not in addr_lower:
+                    print(f"[{t_name}] Skipping out-of-location lead: {name} (address: {address})")
+                    return
+            
+            # Deduplicate by phone number (skip if already seen)
+            if norm_phone:
+                with self._phone_lock:
+                    if norm_phone in self.seen_phones:
+                        print(f"[{t_name}] Skipping duplicate phone: {norm_phone} ({name})")
+                        return
+                    self.seen_phones.add(norm_phone)
                 
             email = None
             if norm_web:
@@ -250,6 +283,17 @@ class MapsScraper:
 
             user_id = str(job['user_id'])
             
+            # DB-level dedup: check if phone already exists for this job
+            if phone:
+                coll = get_collection('leads')
+                existing = coll.find_one({
+                    'job_id': ObjectId(self.job_id) if isinstance(self.job_id, str) else self.job_id,
+                    'phone': phone
+                })
+                if existing:
+                    print(f"Skipping duplicate (DB check): {name} - {phone}")
+                    return
+
             # Save lead
             leads_model.create(
                 job_id=self.job_id,
