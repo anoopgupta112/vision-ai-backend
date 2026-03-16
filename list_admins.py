@@ -18,7 +18,7 @@ def list_admins():
         found = False
         for admin in admins:
             found = True
-            print(f"Email: {admin.get('email')}")
+            print(f"Email : {admin.get('email')}")
             # Passwords are hashed, so we cannot show them.
         
         if not found:
