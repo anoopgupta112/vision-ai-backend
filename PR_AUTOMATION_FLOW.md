@@ -9,6 +9,7 @@ The automation system is partially implemented.
 What works now:
 
 - feature manifests are stored in `automation/features/*.json`
+- discovery can scan both repos and write new `suggested` feature manifests
 - the orchestrator picks the next `approved` feature
 - it builds a staged plan for:
   - branch preparation
@@ -16,6 +17,7 @@ What works now:
   - frontend Codex execution
   - validation
   - PR creation
+- execution now stops before PR creation if branch prep, Codex, or validation fails
 - the PR step already knows:
   - backend repo
   - frontend repo
@@ -24,11 +26,10 @@ What works now:
   - PR bodies
   - cross-link comment text
 
-What is not yet fully enforced:
+What is not yet complete:
 
-- PR creation is not yet blocked automatically if earlier stages fail
 - the scheduled GitHub Actions workflow has not been validated in a full live run
-- discovery mode for suggesting features is still pending
+- discovery suggestions still use deterministic heuristics, not LLM reasoning
 
 ## How PR Opening Works Now
 
@@ -158,6 +159,7 @@ Execute full manual flow:
 
 ```bash
 .venv/bin/python -m automation.orchestrator \
+  --discover \
   --execute-branches \
   --execute-codex \
   --execute-validation \
@@ -166,18 +168,6 @@ Execute full manual flow:
 
 ## Important Safety Rule
 
-The intended rule is:
+The orchestrator now enforces:
 
-`do not open PRs unless validation passes`
-
-The validation commands are already defined, but the orchestrator still needs one more hardening step to strictly stop PR creation when earlier stages fail.
-
-## Recommended Next Hardening Step
-
-Add strict stage gating inside the orchestrator:
-
-1. stop if branch preparation fails
-2. stop if backend Codex fails
-3. stop if frontend Codex fails
-4. stop if validation fails
-5. only then create backend and frontend PRs
+`do not open PRs unless branch prep, Codex, and validation all pass`

@@ -1,12 +1,13 @@
 from automation.models import FeatureManifest
 
 
-def backend_prompt(feature: FeatureManifest) -> str:
+def backend_prompt(feature: FeatureManifest, extra_context: str = "") -> str:
     return _build_prompt(
         repo_role="backend",
         repo_path=feature.backend_repo,
         branch=feature.backend_branch,
         feature=feature,
+        extra_context=extra_context,
         repo_specific_tasks=[
             "Write or update failing backend tests first.",
             "Implement only the backend portion of the feature.",
@@ -18,12 +19,13 @@ def backend_prompt(feature: FeatureManifest) -> str:
     )
 
 
-def frontend_prompt(feature: FeatureManifest) -> str:
+def frontend_prompt(feature: FeatureManifest, extra_context: str = "") -> str:
     return _build_prompt(
         repo_role="frontend",
         repo_path=feature.frontend_repo,
         branch=feature.frontend_branch,
         feature=feature,
+        extra_context=extra_context,
         repo_specific_tasks=[
             "Write or update failing frontend tests first.",
             "Implement only the frontend portion of the feature.",
@@ -40,11 +42,13 @@ def _build_prompt(
     repo_path: str,
     branch: str,
     feature: FeatureManifest,
+    extra_context: str,
     repo_specific_tasks: list[str],
 ) -> str:
     acceptance = "\n".join(f"- {item}" for item in feature.acceptance_criteria)
     api_contract = "\n".join(f"- {item}" for item in feature.api_contract)
     tasks = "\n".join(f"- {item}" for item in repo_specific_tasks)
+    extra = f"\nRetry Context:\n{extra_context}\n" if extra_context.strip() else ""
 
     return f"""You are implementing the {repo_role} side of an approved feature.
 
@@ -58,6 +62,7 @@ Acceptance Criteria:
 
 API Contract:
 {api_contract}
+{extra}
 
 Your Tasks:
 {tasks}

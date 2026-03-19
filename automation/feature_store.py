@@ -2,7 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 from automation.models import ALLOWED_FEATURE_STATUSES, FeatureManifest
 
@@ -59,6 +59,33 @@ def pick_next_approved_feature(manifests: List[FeatureManifest]) -> FeatureManif
     return approved[0]
 
 
+def pick_next_suggested_feature(manifests: List[FeatureManifest]) -> FeatureManifest:
+    suggested = [manifest for manifest in manifests if manifest.status == "suggested"]
+    if not suggested:
+        raise ValueError("No suggested feature manifests found.")
+
+    suggested.sort(key=lambda item: (item.priority, item.id))
+    return suggested[0]
+
+
+def save_feature_manifest(data: dict[str, Any], features_dir: Path = FEATURES_DIR) -> Path:
+    features_dir.mkdir(parents=True, exist_ok=True)
+    path = features_dir / f"{_slugify(data['id'])}.json"
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return path
+
+
+def update_feature_manifest_status(feature: FeatureManifest, status: str) -> Path:
+    if status not in ALLOWED_FEATURE_STATUSES:
+        raise ValueError(f"invalid status '{status}'. Allowed values: {sorted(ALLOWED_FEATURE_STATUSES)}")
+
+    path = Path(feature.source_file)
+    data = json.loads(path.read_text())
+    data["status"] = status
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return path
+
+
 def _require_string(data: dict, key: str, path: Path, scope: str = "root") -> str:
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -81,3 +108,10 @@ def _resolve_path_template(value: str) -> str:
         return os.environ.get(env_name, default if default is not None else match.group(0))
 
     return pattern.sub(replace, value)
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip().lower()).strip("_")
+    if not slug:
+        raise ValueError("feature id must contain at least one alphanumeric character")
+    return slug

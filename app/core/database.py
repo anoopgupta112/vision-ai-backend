@@ -34,6 +34,8 @@ def create_indexes():
     db.jobs.create_index([('status', ASCENDING)])
     db.leads.create_index([('job_id', ASCENDING)])
     db.leads.create_index([('user_id', ASCENDING)])
+    db.saved_searches.create_index([('user_id', ASCENDING)])
+    db.saved_searches.create_index([('created_at', ASCENDING)])
     db.credit_ledger.create_index([('user_id', ASCENDING)])
     db.payments.create_index([('user_id', ASCENDING)])
     db.payments.create_index([('stripe_session_id', ASCENDING)])

@@ -12,28 +12,29 @@ from automation.templates import (
 )
 
 
-def plan_pull_requests(feature: FeatureManifest) -> StageResult:
+def plan_pull_requests(feature: FeatureManifest, stage_results: list[StageResult], draft: bool = False) -> StageResult:
     backend_repo_slug = get_github_repo_slug(feature.backend_repo)
     frontend_repo_slug = get_github_repo_slug(feature.frontend_repo)
     backend_title = backend_pr_title(feature)
     frontend_title = frontend_pr_title(feature)
-    backend_body = backend_pr_body(feature).replace("\n", "\\n")
-    frontend_body = frontend_pr_body(feature).replace("\n", "\\n")
+    backend_body = backend_pr_body(feature, stage_results).replace("\n", "\\n")
+    frontend_body = frontend_pr_body(feature, stage_results).replace("\n", "\\n")
+    draft_flag = " --draft" if draft else ""
 
     return StageResult(
         name="pull_requests",
         status="pending",
         detail=(
             f"backend: gh pr create --repo {backend_repo_slug} --head {feature.backend_branch} "
-            f"--title \"{backend_title}\" --body \"{backend_body}\""
+            f"--title \"{backend_title}\" --body \"{backend_body}\"{draft_flag}"
             f" | frontend: gh pr create --repo {frontend_repo_slug} --head {feature.frontend_branch} "
-            f"--title \"{frontend_title}\" --body \"{frontend_body}\""
+            f"--title \"{frontend_title}\" --body \"{frontend_body}\"{draft_flag}"
             f" | then add cross-link comments on both PRs"
         ),
     )
 
 
-def execute_pull_requests(feature: FeatureManifest) -> StageResult:
+def execute_pull_requests(feature: FeatureManifest, stage_results: list[StageResult], draft: bool = False) -> StageResult:
     backend_repo_slug = get_github_repo_slug(feature.backend_repo)
     frontend_repo_slug = get_github_repo_slug(feature.frontend_repo)
 
@@ -49,7 +50,7 @@ def execute_pull_requests(feature: FeatureManifest) -> StageResult:
             "--title",
             backend_pr_title(feature),
             "--body",
-            backend_pr_body(feature),
+            backend_pr_body(feature, stage_results),
         ],
         [
             "gh",
@@ -62,9 +63,13 @@ def execute_pull_requests(feature: FeatureManifest) -> StageResult:
             "--title",
             frontend_pr_title(feature),
             "--body",
-            frontend_pr_body(feature),
+            frontend_pr_body(feature, stage_results),
         ],
     ]
+
+    if draft:
+        for command in commands:
+            command.append("--draft")
 
     urls: list[str] = []
     for command in commands:

@@ -45,6 +45,7 @@ class AppSmokeTestCase(unittest.TestCase):
         self.assertIn("/api/lead_gen/jobs", rules)
         self.assertIn("/api/lead_gen/leads/job/<job_id>", rules)
         self.assertIn("/api/lead_gen/credits", rules)
+        self.assertIn("/api/lead_gen/saved-searches", rules)
         self.assertIn("/api/admin/stats", rules)
         self.assertIn("/api/payments/create-order", rules)
 

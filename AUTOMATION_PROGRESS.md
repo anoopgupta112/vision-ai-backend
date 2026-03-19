@@ -108,9 +108,10 @@ This file tracks the setup work for scheduled Codex-driven backend and frontend 
   - Python execution adapters for branches
   - Python execution adapters for Codex
   - Python execution adapters for PR creation
+  - strict stage gating before PR execution
+  - graceful no-approved-feature handling
 - Still pending in this step:
   - recovery/retry handling
-  - PR cross-link comments
   - richer execution logging
 
 ### 10. Add scheduled execution
@@ -120,7 +121,9 @@ This file tracks the setup work for scheduled Codex-driven backend and frontend 
   - local cron-based runner
 - Done in first pass:
   - GitHub Actions workflow scaffolded
+  - scheduled mode runs every 30 minutes
   - scheduled mode runs safely in dry-run
+  - scheduled mode can be promoted to full execution with repository variable `AUTOMATION_ENABLE_EXECUTION=true`
   - workflow_dispatch supports controlled execution flags
 - Still pending in this step:
   - verify workflow against real Codex-authenticated execution
@@ -155,16 +158,22 @@ This file tracks the setup work for scheduled Codex-driven backend and frontend 
   - richer backend/frontend PR body templates
   - cross-link comment templates
   - PR execution path now comments on both PRs after creation
+  - orchestrator now enforces validation-before-PR in execution flow
 - Still pending in this step:
-  - enforce validation-before-PR in the orchestrator execution flow
   - add draft PR support and richer metadata
 
 ### 14. Add discovery mode for feature suggestions
-- Status: Pending
+- Status: In Progress
 - Target behavior:
   - scan backend code
   - suggest feature ideas
   - wait for human approval before coding
+- Done in first pass:
+  - deterministic repo scan across backend and frontend
+  - suggested manifests written into `automation/features`
+- Still pending in this step:
+  - richer heuristics and ranking
+  - optional LLM-based suggestion generation
 
 ## Current Done Summary
 
@@ -178,17 +187,15 @@ This file tracks the setup work for scheduled Codex-driven backend and frontend 
 
 ## Current Pending Summary
 
-- full orchestrator execution
-- hardened schedule runner
-- Codex execution workflow
-- hardened PR automation
-- feature discovery workflow
+- live Codex-authenticated workflow verification
+- hardened schedule runner with retries/reporting
+- richer discovery workflow
 
 ## Recommended Next Step
 
-Finish the orchestrator execution path:
+Verify and harden the live workflow:
 
-1. enforce validation-before-PR in execution flow
-2. add feature discovery workflow
-3. verify scheduled workflow with a live run
-4. then harden retries/recovery
+1. run a Codex-authenticated scheduled/manual workflow in GitHub Actions
+2. confirm branch push and PR creation in both repos
+3. improve discovery heuristics and ranking
+4. then add retries/recovery

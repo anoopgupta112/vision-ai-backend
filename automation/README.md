@@ -8,26 +8,26 @@ This first version does these things:
 
 - stores feature manifests in `automation/features/`
 - validates feature manifests
+- discovers suggested feature manifests by scanning backend/frontend repos
 - picks the next approved feature
 - tracks orchestration state in `automation/state.json`
 - runs a dry-run orchestration flow
 - can execute the validation stage from Python
 - generates real branch, Codex, and PR command plans
-- provides clear placeholders for:
-  - backend Codex execution
-  - frontend Codex execution
-  - PR creation
+- can execute backend/frontend Codex runs
+- can execute PR creation with cross-link comments
+- enforces stage gating so PR creation does not run after branch, Codex, or validation failures
 
 This version does not yet:
 
-- schedule itself in GitHub Actions
 - manage retries/recovery automatically
-- run discovery-mode feature suggestion scans
+- prove a live Codex-authenticated GitHub Actions run end-to-end
 
 GitHub Actions scheduling has now been scaffolded in `.github/workflows/automation-orchestrator.yml`.
-The scheduled run is safe by default:
+The scheduled run now triggers every 30 minutes and is safe by default:
 
-- scheduled executions run `--dry-run --execute-validation`
+- scheduled executions run discovery and keep `--dry-run` enabled by default
+- set repository variable `AUTOMATION_ENABLE_EXECUTION=true` to let scheduled runs execute branches, Codex, validation, and PR creation
 - manual dispatch can opt into branch prep, Codex execution, validation, and PR creation
 - repo paths are resolved from environment variables in CI
 - PR creation supports richer bodies and cross-link comments when `--execute-prs` is used
@@ -71,10 +71,10 @@ Dry run:
 .venv/bin/python -m automation.orchestrator --dry-run
 ```
 
-Dry run with validation commands shown:
+Run discovery and dry-run orchestration:
 
 ```bash
-.venv/bin/python -m automation.orchestrator --dry-run
+.venv/bin/python -m automation.orchestrator --discover --dry-run
 ```
 
 Execute the validation stage:
@@ -92,13 +92,19 @@ Execute branches + validation:
 Execute the full flow manually:
 
 ```bash
-.venv/bin/python -m automation.orchestrator --execute-branches --execute-codex --execute-validation --execute-prs
+.venv/bin/python -m automation.orchestrator --discover --execute-branches --execute-codex --execute-validation --execute-prs
 ```
 
 Mark the picked feature as in progress in state:
 
 ```bash
 .venv/bin/python -m automation.orchestrator
+```
+
+Run discovery only and write suggested manifests:
+
+```bash
+.venv/bin/python -m automation.discovery --write
 ```
 
 Inspect current state:

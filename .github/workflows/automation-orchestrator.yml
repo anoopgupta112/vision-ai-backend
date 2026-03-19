@@ -2,7 +2,7 @@ name: Automation Orchestrator
 
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -25,33 +25,52 @@ on:
         required: true
         default: true
         type: boolean
+      execute_pushes:
+        description: 'Commit and push backend/frontend branches'
+        required: true
+        default: false
+        type: boolean
       execute_prs:
         description: 'Create pull requests with gh'
         required: true
         default: false
         type: boolean
+      max_retries:
+        description: 'Maximum Codex/validation retry attempts'
+        required: true
+        default: '3'
+        type: string
 
 jobs:
   orchestrate:
     name: Run Automation Orchestrator
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
 
     env:
       BACKEND_REPO_PATH: ${{ github.workspace }}
       FRONTEND_REPO_PATH: ${{ github.workspace }}/frontend_workspace
+      AUTOMATION_ENABLE_DISCOVERY: "true"
+      AUTOMATION_ENABLE_EXECUTION: ${{ vars.AUTOMATION_ENABLE_EXECUTION || 'true' }}
+      AUTOMATION_AUTO_APPROVE: ${{ vars.AUTOMATION_AUTO_APPROVE || 'true' }}
+      AUTOMATION_FORCE_PRS: ${{ vars.AUTOMATION_FORCE_PRS || 'true' }}
+      AUTOMATION_WEBHOOK_URL: ${{ secrets.AUTOMATION_WEBHOOK_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Checkout backend repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Checkout frontend repo
         uses: actions/checkout@v4
         with:
           repository: anoopgupta112/vision-ai-frontend
           path: frontend_workspace
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -74,6 +93,19 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend_workspace
         run: npm install
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "automation-bot"
+          git config --global user.email "automation-bot@users.noreply.github.com"
+
+      - name: Verify GitHub authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh auth status
 
       - name: Run orchestrator
         env:
@@ -106,6 +138,30 @@ jobs:
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.execute_prs }}" == "true" ]]; then
             ARGS+=(--execute-prs)
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.execute_pushes }}" == "true" ]]; then
+            ARGS+=(--execute-pushes)
+          fi
+
+          if [[ "${AUTOMATION_ENABLE_DISCOVERY}" == "true" ]]; then
+            ARGS+=(--discover)
+          fi
+
+          if [[ "${AUTOMATION_AUTO_APPROVE}" == "true" ]]; then
+            ARGS+=(--auto-approve)
+          fi
+
+          if [[ "${AUTOMATION_FORCE_PRS}" == "true" ]]; then
+            ARGS+=(--force-prs)
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ARGS+=(--max-retries "${{ inputs.max_retries }}")
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" && "${AUTOMATION_ENABLE_EXECUTION}" == "true" ]]; then
+            ARGS=(--discover --auto-approve --force-prs --execute-branches --execute-codex --execute-validation --execute-pushes --execute-prs)
           fi
 
           python -m automation.orchestrator "${ARGS[@]}" | tee automation-run.json
