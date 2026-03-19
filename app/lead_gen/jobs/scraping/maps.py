@@ -20,6 +20,10 @@ class MapsScraper:
         # Phone-based deduplication
         self.seen_phones = set()
         self._phone_lock = threading.Lock()
+        # Background workers may be exercised directly in tests or reused before run().
+        self.search_location_parts = []
+        self.last_activity_time = time.time()
+        self.processor = None
 
     def run(self):
         job = jobs_model.find_by_id(self.job_id)

@@ -24,7 +24,7 @@ def register_user(email, password, phone=None):
     pending_coll.delete_many({'email': email})
     
     # Hash the password
-    password_hash = generate_password_hash(password)
+    password_hash = generate_password_hash(password, method='pbkdf2:sha256')
     
     # Store pending registration
     pending_doc = {

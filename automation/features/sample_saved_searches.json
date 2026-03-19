@@ -1,0 +1,23 @@
+{
+  "id": "saved-searches",
+  "title": "Add saved searches",
+  "status": "in_progress",
+  "priority": 10,
+  "backend_repo": "${BACKEND_REPO_PATH:-/Users/anoopchandra/repositories/main_dashboard}",
+  "frontend_repo": "${FRONTEND_REPO_PATH:-/Users/anoopchandra/repositories/main_dashboard_frontend}",
+  "branches": {
+    "backend": "agent/saved-searches-backend",
+    "frontend": "agent/saved-searches-frontend"
+  },
+  "acceptance_criteria": [
+    "User can save a search query from the lead generation workflow",
+    "Backend stores saved search definitions per user",
+    "Frontend lists saved searches and allows launching a saved search",
+    "Existing regression suites remain green"
+  ],
+  "api_contract": [
+    "POST /api/lead_gen/saved-searches",
+    "GET /api/lead_gen/saved-searches",
+    "DELETE /api/lead_gen/saved-searches/:id"
+  ]
+}
