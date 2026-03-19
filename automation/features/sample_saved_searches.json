@@ -1,7 +1,7 @@
 {
   "id": "saved-searches",
   "title": "Add saved searches",
-  "status": "approved",
+  "status": "in_progress",
   "priority": 10,
   "backend_repo": "${BACKEND_REPO_PATH:-/Users/anoopchandra/repositories/main_dashboard}",
   "frontend_repo": "${FRONTEND_REPO_PATH:-/Users/anoopchandra/repositories/main_dashboard_frontend}",

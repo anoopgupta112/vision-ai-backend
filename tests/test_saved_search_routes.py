@@ -145,6 +145,23 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json(), {"message": "Saved search deleted"})
         delete_saved_search.assert_called_once_with("saved-1", "user-1")
 
+    @patch("app.lead_gen.saved_searches.routes.pipeline.delete_saved_search")
+    def test_delete_saved_search_returns_not_found_error(self, delete_saved_search):
+        from app.core.exceptions import NotFoundError
+
+        delete_saved_search.side_effect = NotFoundError("Saved search not found")
+
+        decode_token, find_user = self._auth_patches()
+        with decode_token, find_user:
+            response = self.client.delete(
+                "/api/lead_gen/saved-searches/missing-search",
+                headers=self.auth_headers,
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.get_json(), {"error": "Saved search not found"})
+        delete_saved_search.assert_called_once_with("missing-search", "user-1")
+
 
 class SavedSearchModelTestCase(unittest.TestCase):
     def test_delete_saved_search_raises_when_nothing_was_removed(self):

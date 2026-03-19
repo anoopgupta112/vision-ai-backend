@@ -123,7 +123,8 @@ def main() -> int:
 
     preflight_stage = run_preflight(
         feature,
-        require_execution=args.execute_codex or args.execute_pushes or args.execute_prs,
+        require_codex=args.execute_codex,
+        require_github=args.execute_prs,
         require_webhook=bool(args.webhook_url),
     )
     stage_results.append(preflight_stage)

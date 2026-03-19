@@ -54,6 +54,22 @@ class DomainModelTestCase(unittest.TestCase):
         self.assertIsNone(doc.get("location"))
         self.assertIsInstance(doc["created_at"], datetime)
 
+    def test_create_saved_search_doc_builds_launch_query_from_keyword_and_location(self):
+        doc = saved_searches_model.create_doc(
+            "507f1f77bcf86cd799439011",
+            "",
+            10,
+            keyword="Plumbers",
+            location="Mumbai",
+        )
+
+        self.assertEqual(doc["name"], "Plumbers in Mumbai")
+        self.assertEqual(doc["query"], "Plumbers in Mumbai")
+        self.assertEqual(doc["query_preview"], "Plumbers in Mumbai")
+        self.assertEqual(doc["keyword"], "Plumbers")
+        self.assertEqual(doc["location"], "Mumbai")
+        self.assertEqual(doc["limit"], 10)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@ from automation.preflight import run_preflight
 
 
 class PreflightTests(unittest.TestCase):
-    def test_preflight_passes_with_required_tools_and_auth(self) -> None:
+    def test_preflight_passes_for_codex_only_without_api_key(self) -> None:
         with tempfile.TemporaryDirectory() as backend_dir, tempfile.TemporaryDirectory() as frontend_dir:
             Path(backend_dir, ".git").mkdir()
             Path(frontend_dir, ".git").mkdir()
@@ -18,8 +18,6 @@ class PreflightTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "OPENAI_API_KEY": "test-key",
-                    "GH_TOKEN": "test-token",
                     "AUTOMATION_WEBHOOK_URL": "https://example.com/webhook",
                 },
                 clear=False,
@@ -30,11 +28,11 @@ class PreflightTests(unittest.TestCase):
                 run_command.return_value.stdout = "ok"
                 run_command.return_value.stderr = ""
 
-                result = run_preflight(feature, require_execution=True, require_webhook=True)
+                result = run_preflight(feature, require_codex=True, require_webhook=True)
 
         self.assertEqual("done", result.status)
 
-    def test_preflight_fails_when_auth_is_missing(self) -> None:
+    def test_preflight_fails_when_github_auth_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as backend_dir, tempfile.TemporaryDirectory() as frontend_dir:
             Path(backend_dir, ".git").mkdir()
             Path(frontend_dir, ".git").mkdir()
@@ -47,10 +45,10 @@ class PreflightTests(unittest.TestCase):
                 run_command.return_value.stdout = ""
                 run_command.return_value.stderr = "not logged in"
 
-                result = run_preflight(feature, require_execution=True, require_webhook=True)
+                result = run_preflight(feature, require_github=True, require_webhook=True)
 
         self.assertEqual("failed", result.status)
-        self.assertIn("OPENAI_API_KEY", result.detail)
+        self.assertIn("not logged in", result.detail)
         self.assertIn("AUTOMATION_WEBHOOK_URL", result.detail)
 
     def _feature(self, backend_dir: str, frontend_dir: str) -> FeatureManifest:
