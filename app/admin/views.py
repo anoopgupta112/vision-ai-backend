@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from app.core.middleware import auth_required, admin_required, get_current_user
 from app.core.database import get_collection
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import AppException, NotFoundError, ValidationError
 from app.auth import models as auth_models
 from app.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
+from app.lead_gen.jobs import model as jobs_model, pipeline as jobs_pipeline
 from app.lead_gen import credit_requests
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -155,6 +156,16 @@ def list_all_jobs():
         'jobs': result,
         'total': total
     }), 200
+
+@bp.route('/jobs/<job_id>/retry', methods=['POST'])
+@auth_required
+@admin_required
+def retry_job(job_id):
+    try:
+        job = jobs_pipeline.retry_job(job_id)
+        return jsonify({'job': jobs_model.to_response(job)}), 200
+    except AppException as e:
+        return jsonify({'error': e.message}), e.status_code
 
 # Credit Request Management
 @bp.route('/credit-requests', methods=['GET'])

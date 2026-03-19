@@ -2,6 +2,7 @@ from redis import Redis
 from rq import Queue
 from app.core.config import Config
 from app.lead_gen.jobs import model
+from app.lead_gen.leads import model as leads_model
 from app.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
 from app.core.exceptions import InsufficientCreditsError, NotFoundError, AuthorizationError, JobStatusError, ExtractionError
 
@@ -39,8 +40,30 @@ def cancel_job(job_id, user_id):
     if job['status'] != model.STATUS_QUEUED:
         raise JobStatusError('Cannot cancel job in current status')
     
-    from app.lead_gen.leads import model as leads_model
     model.delete(job_id)
     leads_model.delete_by_job(job_id)
     return {'message': 'Job cancelled'}
 
+def _ensure_retryable(job):
+    if job['status'] != model.STATUS_FAILED:
+        raise JobStatusError('Cannot retry job in current status')
+
+def retry_job(job_id):
+    job = model.find_by_id(job_id)
+    if not job:
+        raise NotFoundError('Job not found')
+
+    _ensure_retryable(job)
+
+    leads_model.delete_by_job(job_id)
+    model.reset_for_retry(job_id)
+
+    from worker import process_extraction_job
+    queue.enqueue(process_extraction_job, str(job_id))
+
+    return model.find_by_id(job_id)
+
+def retry_user_job(job_id, user_id):
+    job = get_user_job(job_id, user_id)
+    _ensure_retryable(job)
+    return retry_job(job_id)

@@ -81,6 +81,23 @@ def update_progress(job_id, leads_delivered):
         job_id = ObjectId(job_id)
     coll.update_one({'_id': job_id}, {'$set': {'leads_delivered': leads_delivered}})
 
+def reset_for_retry(job_id):
+    coll = get_collection(COLLECTION)
+    if isinstance(job_id, str):
+        job_id = ObjectId(job_id)
+    coll.update_one(
+        {'_id': job_id},
+        {
+            '$set': {
+                'status': STATUS_QUEUED,
+                'leads_delivered': 0,
+                'error_message': None,
+                'started_at': None,
+                'finished_at': None,
+            }
+        },
+    )
+
 def delete(job_id):
     coll = get_collection(COLLECTION)
     if isinstance(job_id, str):

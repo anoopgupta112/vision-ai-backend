@@ -63,3 +63,13 @@ def cancel(job_id):
         return jsonify(result), 200
     except AppException as e:
         return jsonify({'error': e.message}), e.status_code
+
+@bp.route('/<job_id>/retry', methods=['POST'])
+@auth_required
+def retry(job_id):
+    user = get_current_user()
+    try:
+        job = pipeline.retry_user_job(job_id, str(user['_id']))
+        return jsonify({'job': model.to_response(job)}), 200
+    except AppException as e:
+        return jsonify({'error': e.message}), e.status_code
