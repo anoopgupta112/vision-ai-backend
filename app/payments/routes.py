@@ -1,12 +1,21 @@
 """
 Payment routes - API endpoints for Razorpay integration
 """
-from flask import Blueprint, request, jsonify, current_app
+import csv
+import io
+
+from flask import Blueprint, Response, request, jsonify, current_app
 from app.core.middleware import auth_required, get_current_user
 from app.payments import service, model
 from app.lead_gen.credits import model as credits_model
 
 bp = Blueprint('payments', __name__, url_prefix='/api/payments')
+
+
+def _format_timestamp(value):
+    if not value:
+        return ''
+    return value.isoformat()
 
 @bp.route('/packages', methods=['GET'])
 def get_packages():
@@ -190,3 +199,44 @@ def get_payment_history():
     return jsonify({
         'transactions': [model.to_response(t) for t in transactions]
     }), 200
+
+
+@bp.route('/history/export', methods=['GET'])
+@auth_required
+def export_payment_history():
+    """Download the authenticated user's payment history as CSV"""
+    user = get_current_user()
+    transactions = model.get_user_transactions(str(user['_id']), 10000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'Order ID',
+        'Payment ID',
+        'Package ID',
+        'Amount',
+        'Currency',
+        'Credits Purchased',
+        'Payment Status',
+        'Created At',
+        'Updated At',
+    ])
+
+    for transaction in transactions:
+        writer.writerow([
+            transaction.get('razorpay_order_id', ''),
+            transaction.get('razorpay_payment_id', ''),
+            transaction.get('package_id', ''),
+            transaction.get('amount', ''),
+            transaction.get('currency', 'INR'),
+            transaction.get('credits', ''),
+            transaction.get('status', ''),
+            _format_timestamp(transaction.get('created_at')),
+            _format_timestamp(transaction.get('updated_at')),
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=payment_history.csv'},
+    )
