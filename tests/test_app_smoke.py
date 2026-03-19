@@ -50,6 +50,7 @@ class AppSmokeTestCase(unittest.TestCase):
         self.assertIn("/api/admin/jobs/<job_id>/retry", rules)
         self.assertIn("/api/admin/stats", rules)
         self.assertIn("/api/payments/create-order", rules)
+        self.assertIn("/api/payments/history/export", rules)
 
 
 if __name__ == "__main__":

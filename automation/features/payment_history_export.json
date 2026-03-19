@@ -1,7 +1,7 @@
 {
   "id": "payment-history-export",
   "title": "Add payment history export",
-  "status": "suggested",
+  "status": "in_progress",
   "priority": 40,
   "backend_repo": "/Users/anoopchandra/repositories/main_dashboard",
   "frontend_repo": "/Users/anoopchandra/repositories/main_dashboard_frontend",

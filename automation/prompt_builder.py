@@ -10,6 +10,7 @@ def backend_prompt(feature: FeatureManifest, extra_context: str = "") -> str:
         extra_context=extra_context,
         repo_specific_tasks=[
             "Write or update failing backend tests first.",
+            "Add or update backend tests for every API route, service, model, or regression path you touch.",
             "Implement only the backend portion of the feature.",
             "Preserve all existing behavior covered by regression tests.",
             "Run the backend regression suite before finishing.",
@@ -28,6 +29,7 @@ def frontend_prompt(feature: FeatureManifest, extra_context: str = "") -> str:
         extra_context=extra_context,
         repo_specific_tasks=[
             "Write or update failing frontend tests first.",
+            "Add or update frontend tests for every page, component, API integration, or user flow you touch.",
             "Implement only the frontend portion of the feature.",
             "Follow the shared API contract and acceptance criteria.",
             "Run frontend test, lint, and build checks before finishing.",
@@ -49,6 +51,11 @@ def _build_prompt(
     api_contract = "\n".join(f"- {item}" for item in feature.api_contract)
     tasks = "\n".join(f"- {item}" for item in repo_specific_tasks)
     extra = f"\nRetry Context:\n{extra_context}\n" if extra_context.strip() else ""
+    test_change_constraint = (
+        "Do not leave backend app changes without matching backend test changes."
+        if repo_role == "backend"
+        else "Do not leave frontend src changes without matching frontend test changes."
+    )
 
     return f"""You are implementing the {repo_role} side of an approved feature.
 
@@ -72,5 +79,6 @@ Constraints:
 - Do not skip tests.
 - Keep changes scoped to this repository.
 - Preserve existing regression behavior.
+- {test_change_constraint}
 - If the feature is ambiguous, stop and report the ambiguity.
 """
