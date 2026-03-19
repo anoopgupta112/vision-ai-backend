@@ -162,6 +162,30 @@ class AdminRoutesTestCase(unittest.TestCase):
             note="Credit request approved: Approved for onboarding",
         )
 
+    @patch("app.admin.views.jobs_pipeline.retry_job")
+    @patch("app.admin.views.jobs_model.to_response")
+    def test_retry_job_returns_serialized_job(self, to_response, retry_job):
+        retry_job.return_value = {"_id": "job-1"}
+        to_response.return_value = {
+            "id": "job-1",
+            "query_text": "failed search",
+            "leads_requested": 20,
+            "leads_delivered": 0,
+            "status": "queued",
+            "error_message": None,
+        }
+
+        decode_token, find_user = self._admin_patches()
+        with decode_token, find_user:
+            response = self.client.post(
+                "/api/admin/jobs/job-1/retry",
+                headers=self.auth_headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["job"]["status"], "queued")
+        retry_job.assert_called_once_with("job-1")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -114,6 +114,30 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["jobs"][0]["id"], "job-1")
         find_by_user.assert_called_once_with("user-1", 2, 5)
 
+    @patch("app.lead_gen.jobs.routes.pipeline.retry_user_job")
+    @patch("app.lead_gen.jobs.routes.model.to_response")
+    def test_retry_job_returns_serialized_job(self, to_response, retry_user_job):
+        retry_user_job.return_value = {"_id": "job-1"}
+        to_response.return_value = {
+            "id": "job-1",
+            "query_text": "plumbers in mumbai",
+            "leads_requested": 10,
+            "leads_delivered": 0,
+            "status": "queued",
+            "error_message": None,
+        }
+
+        decode_token, find_user = self._auth_patches()
+        with decode_token, find_user:
+            response = self.client.post(
+                "/api/lead_gen/jobs/job-1/retry",
+                headers=self.auth_headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["job"]["status"], "queued")
+        retry_user_job.assert_called_once_with("job-1", "user-1")
+
     @patch("app.lead_gen.leads.routes.pipeline.get_leads_for_job")
     def test_download_csv_returns_expected_headers_and_rows(self, get_leads_for_job):
         get_leads_for_job.return_value = [

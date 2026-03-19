@@ -1,7 +1,7 @@
 {
   "id": "job-retry-controls",
   "title": "Add failed job retry controls",
-  "status": "suggested",
+  "status": "in_progress",
   "priority": 30,
   "backend_repo": "/Users/anoopchandra/repositories/main_dashboard",
   "frontend_repo": "/Users/anoopchandra/repositories/main_dashboard_frontend",
