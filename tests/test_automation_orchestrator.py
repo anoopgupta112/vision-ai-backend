@@ -130,6 +130,33 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(1, exit_code)
         execute_branch_preparation.assert_not_called()
 
+    def test_runs_explicit_feature_id_without_global_pick(self) -> None:
+        feature = self._feature()
+        other_feature = self._feature()
+        other_feature.id = "other-approved-feature"
+        args = self._args(execute_prs=False)
+        args.feature_id = "job-retry-controls"
+        args.dry_run = True
+
+        with patch("automation.orchestrator.parse_args", return_value=args), \
+            patch("automation.orchestrator.load_feature_manifests", return_value=[other_feature, feature]), \
+            patch("automation.orchestrator.find_feature_by_id", return_value=feature) as find_feature_by_id, \
+            patch("automation.orchestrator.pick_next_approved_feature") as pick_next_approved_feature, \
+            patch("automation.orchestrator.validate_feature_manifest", return_value=[]), \
+            patch("automation.orchestrator.run_preflight", return_value=StageResult("preflight", "done", "ok")), \
+            patch("automation.orchestrator.update_feature_manifest_status"), \
+            patch("automation.orchestrator.execute_branch_preparation", return_value=StageResult("branch_preparation", "done", "ok")), \
+            patch("automation.orchestrator.execute_backend_codex_run", return_value=StageResult("backend_codex", "done", "ok")), \
+            patch("automation.orchestrator.execute_frontend_codex_run", return_value=StageResult("frontend_codex", "done", "ok")), \
+            patch("automation.orchestrator.execute_validation_run", return_value=StageResult("validation", "done", "ok")), \
+            patch("automation.orchestrator.plan_branch_push", return_value=StageResult("branch_push", "pending", "planned")), \
+            patch("automation.orchestrator.plan_pull_requests", return_value=StageResult("pull_requests", "pending", "planned")):
+            exit_code = orchestrator.main()
+
+        self.assertEqual(0, exit_code)
+        find_feature_by_id.assert_called_once()
+        pick_next_approved_feature.assert_not_called()
+
     def _args(self, auto_approve: bool = False, execute_prs: bool = True, force_prs: bool = False) -> Namespace:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -150,6 +177,7 @@ class OrchestratorTests(unittest.TestCase):
             execute_codex=True,
             execute_validation=True,
             execute_prs=execute_prs,
+            feature_id="",
         )
 
     def _feature(self, status: str = "approved") -> FeatureManifest:

@@ -1,0 +1,604 @@
+{
+  "project_name": "Main Dashboard",
+  "project_summary": "A lead-generation and payments platform with auth, admin controls, lead extraction jobs, saved searches, credits, and payment history.",
+  "discovery_goals": [
+    "Suggest features grounded in the current backend API surface and frontend pages/components.",
+    "Prefer user-facing improvements that connect an existing backend capability to a missing frontend flow, or add a small new backend and frontend capability on top of an existing module.",
+    "Return multiple candidate features instead of a single suggestion when the project context supports them."
+  ],
+  "backend_context": [
+    "Auth routes support registration, login, profile updates, and JWT-based authorization.",
+    "Lead generation includes jobs, leads download, credits balance/history, saved searches, and retry flows.",
+    "Admin routes support user management, credit approvals, stats, and job retry controls.",
+    "Payments routes support packages, order creation, verification, history, and history export."
+  ],
+  "frontend_context": [
+    "Frontend has admin, auth, lead generation, payment history, job details, saved searches, and credits history pages/components.",
+    "Lead details already support CSV download from the job details view.",
+    "Payment history already supports export, but filtering and richer workflows can still be added."
+  ],
+  "feature_templates": [
+    {
+      "id": "job-retry-controls",
+      "title": "Add failed job retry controls",
+      "priority": 30,
+      "required_backend_files": [
+        "app/lead_gen/jobs/routes.py",
+        "app/admin/views.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/components/JobsList.tsx",
+        "src/features/admin-dashboard/pages/AdminPage.tsx"
+      ],
+      "acceptance_criteria": [
+        "Users can retry failed lead generation jobs from the main jobs list",
+        "Admins can trigger a retry for failed jobs from the admin dashboard",
+        "Retry eligibility is enforced so completed or running jobs cannot be retried",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "POST /api/lead_gen/jobs/:id/retry",
+        "POST /api/admin/jobs/:id/retry"
+      ]
+    },
+    {
+      "id": "payment-history-export",
+      "title": "Add payment history export",
+      "priority": 40,
+      "required_backend_files": [
+        "app/payments/routes.py",
+        "app/lead_gen/credits/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/pages/PaymentHistoryPage.tsx",
+        "src/features/lead-gen/api/paymentsApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users can export their payment history from the payment history screen",
+        "Backend returns a downloadable payment history export scoped to the authenticated user",
+        "The export includes credits purchased, payment status, and timestamps",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/payments/history/export"
+      ]
+    },
+    {
+      "id": "saved-search-alerts",
+      "title": "Add saved search alerts",
+      "priority": 50,
+      "required_backend_files": [
+        "app/lead_gen/saved_searches/routes.py",
+        "app/lead_gen/leads/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/components/SavedSearchesPanel.tsx",
+        "src/features/lead-gen/components/LeadsTable.tsx"
+      ],
+      "acceptance_criteria": [
+        "Users can enable alerts for a saved search",
+        "Backend stores alert preferences per saved search",
+        "Frontend shows alert status and lets users toggle alerts from the saved searches panel",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "POST /api/lead_gen/saved-searches/:id/alerts",
+        "PATCH /api/lead_gen/saved-searches/:id/alerts"
+      ]
+    },
+    {
+      "id": "credit-history-export",
+      "title": "Add credit history export",
+      "priority": 60,
+      "required_backend_files": [
+        "app/lead_gen/credits/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/components/CreditsHistory.tsx",
+        "src/features/lead-gen/api/creditsApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users can export their credit history from the credits history view",
+        "Backend returns a CSV export of the authenticated user's credit ledger history",
+        "Frontend exposes the export action next to the existing credits history table",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/lead_gen/credits/history/export"
+      ]
+    },
+    {
+      "id": "admin-user-filters",
+      "title": "Add admin user search and status filters",
+      "priority": 70,
+      "required_backend_files": [
+        "app/admin/views.py"
+      ],
+      "required_frontend_files": [
+        "src/features/admin-dashboard/pages/AdminPage.tsx",
+        "src/features/admin-dashboard/api/adminApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Admins can filter users by email query, admin flag, and active status",
+        "Backend accepts filter parameters for the users list endpoint",
+        "Frontend exposes the filters in the admin users tab",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/admin/users?query=&is_admin=&is_active="
+      ]
+    },
+    {
+      "id": "payment-history-filters",
+      "title": "Add payment history filters",
+      "priority": 80,
+      "tier": "core",
+      "required_backend_files": [
+        "app/payments/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/pages/PaymentHistoryPage.tsx",
+        "src/features/lead-gen/api/paymentsApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users can filter payment history by status and package",
+        "Backend accepts filter parameters for payment history",
+        "Frontend exposes filter controls above the payment history table",
+        "Backend and frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/payments/history?status=&package_id="
+      ]
+    },
+    {
+      "id": "landing-page-refresh",
+      "title": "Add a marketing landing page refresh",
+      "priority": 90,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/__init__.py"
+      ],
+      "required_frontend_files": [
+        "src/features/dashboard/DashboardPage.tsx",
+        "src/features/auth/components/LoginForm.tsx"
+      ],
+      "acceptance_criteria": [
+        "The product gets a clearer entry landing page with product value and call-to-action sections",
+        "Existing auth and dashboard routes continue to work",
+        "Frontend regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /",
+        "GET /health"
+      ]
+    },
+    {
+      "id": "payment-package-comparison",
+      "title": "Add payment package comparison and recommendation UI",
+      "priority": 100,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/payments/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/pages/BuyCreditsPage.tsx",
+        "src/features/lead-gen/api/paymentsApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users can compare available credit packages with better plan context",
+        "Frontend highlights a recommended package based on current pricing data",
+        "Payment purchase flow remains unchanged and regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/payments/packages",
+        "POST /api/payments/create-order"
+      ]
+    },
+    {
+      "id": "payment-status-experience",
+      "title": "Improve payment status and recovery experience",
+      "priority": 110,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/payments/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/pages/PaymentStatusPage.tsx",
+        "src/features/lead-gen/api/paymentsApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users get a clearer payment success, pending, and failed status experience",
+        "The payment status page suggests next actions for retry or support",
+        "Payment regression suites remain green"
+      ],
+      "api_contract": [
+        "POST /api/payments/verify",
+        "GET /api/payments/history"
+      ]
+    },
+    {
+      "id": "profile-security-settings",
+      "title": "Add profile security settings",
+      "priority": 120,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/auth/views.py",
+        "app/auth/services.py"
+      ],
+      "required_frontend_files": [
+        "src/features/auth/pages/ProfilePage.tsx",
+        "src/features/auth/api/authApi.ts"
+      ],
+      "acceptance_criteria": [
+        "Users can manage password or security-related profile settings from the profile page",
+        "Backend validates and stores the change safely",
+        "Auth and profile regression suites remain green"
+      ],
+      "api_contract": [
+        "PUT /api/auth/profile",
+        "POST /api/auth/change-password"
+      ]
+    },
+    {
+      "id": "job-details-insights",
+      "title": "Add richer job details insights",
+      "priority": 130,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/lead_gen/jobs/routes.py",
+        "app/lead_gen/leads/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/pages/JobDetailsPage.tsx",
+        "src/features/lead-gen/components/LeadsTable.tsx"
+      ],
+      "acceptance_criteria": [
+        "Users can see richer summary metrics and lead quality context on job details",
+        "Existing job and lead retrieval endpoints continue to support the page",
+        "Lead generation regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/lead_gen/jobs/:id",
+        "GET /api/lead_gen/leads/job/:id"
+      ]
+    },
+    {
+      "id": "saved-search-management-page",
+      "title": "Add a dedicated saved search management page",
+      "priority": 140,
+      "tier": "exploratory",
+      "required_backend_files": [
+        "app/lead_gen/saved_searches/routes.py"
+      ],
+      "required_frontend_files": [
+        "src/features/lead-gen/components/SavedSearchesPanel.tsx",
+        "src/features/lead-gen/pages/LeadGenPage.tsx"
+      ],
+      "acceptance_criteria": [
+        "Users can manage saved searches on a dedicated page instead of only inside the lead generator form",
+        "Saved searches can still be reused and deleted",
+        "Saved search regression suites remain green"
+      ],
+      "api_contract": [
+        "GET /api/lead_gen/saved-searches",
+        "DELETE /api/lead_gen/saved-searches/:id"
+      ]
+    }
+  ],
+  "project_templates": [
+    {
+      "id": "lead-gen-marketing-site",
+      "title": "Lead Generation Marketing Site",
+      "priority": 10,
+      "summary": "A standalone marketing and onboarding site for the lead generation product with pricing, feature pages, testimonials, and signup funnels.",
+      "why_now": "The current product has strong operational flows but no dedicated public-facing acquisition surface.",
+      "market_value": "A stronger landing and pricing experience can convert visitors who currently never reach the product flows.",
+      "market_research": [
+        "Lead-gen products usually win trust with clear outcomes, proof, and pricing before asking for signup.",
+        "A public site creates a top-of-funnel path that the current dashboard-style product does not provide.",
+        "Search-driven pages and use-case pages can capture intent from teams already looking for lead sourcing tools."
+      ],
+      "growth_chances": [
+        "Can become the acquisition layer for the existing product",
+        "Supports SEO, ads, demos, and sales-assisted signup flows",
+        "Can later branch into industry-specific pages and experiments"
+      ],
+      "benefits": [
+        "Better first impression for new users",
+        "Clearer package and value communication",
+        "Stronger signup and demo conversion flow"
+      ],
+      "future_scope_ai": [
+        "AI-assisted landing copy variants by audience segment",
+        "AI-generated use-case pages from product capabilities",
+        "AI chat concierge for qualification and plan guidance"
+      ],
+      "project_features": [
+        "Public acquisition funnel with clear lead-gen messaging",
+        "Package comparison and signup conversion flow",
+        "SEO-friendly feature and use-case pages"
+      ],
+      "suggested_pages": [
+        "Landing page",
+        "Pricing and package comparison",
+        "Product feature overview",
+        "Contact or demo request"
+      ]
+    },
+    {
+      "id": "payments-ops-console",
+      "title": "Payments Operations Console",
+      "priority": 20,
+      "summary": "A dedicated internal operations project focused on payment health, failed payment recovery, refunds, and transaction support workflows.",
+      "why_now": "The current app already has payment verification, history, and admin controls that could evolve into a separate finance-support console.",
+      "market_value": "Payment support and recovery tools reduce revenue leakage and lower the time operators spend investigating failures.",
+      "market_research": [
+        "Teams with growing payment volume usually split support and recovery tooling out from the main product UI.",
+        "Operators need transaction timelines, failure grouping, and next-step actions in one place.",
+        "Dedicated ops views become more valuable as payment states and support requests increase."
+      ],
+      "growth_chances": [
+        "Can grow into a finance-support workspace",
+        "Supports refund workflows, escalations, and anomaly tracking",
+        "Can later integrate alerts and AI-assisted support triage"
+      ],
+      "benefits": [
+        "Faster failed-payment recovery",
+        "Cleaner operator workflows",
+        "Less support guesswork across payment states"
+      ],
+      "future_scope_ai": [
+        "AI-based failed-payment clustering and root-cause suggestions",
+        "AI-generated operator summaries for support tickets",
+        "AI risk scoring for retries, refunds, and manual review"
+      ],
+      "project_features": [
+        "Payment failure triage workflows",
+        "Refund review and operator actions",
+        "Customer payment timeline and status recovery"
+      ],
+      "suggested_pages": [
+        "Transaction monitoring dashboard",
+        "Failed payment investigation",
+        "Customer payment timeline",
+        "Refund request handling"
+      ]
+    },
+    {
+      "id": "client-reporting-portal",
+      "title": "Client Reporting Portal",
+      "priority": 30,
+      "summary": "A client-facing reporting product that turns lead generation jobs, saved searches, and exports into a polished reporting portal.",
+      "why_now": "The current platform already stores jobs, leads, saved searches, and payment history that can be packaged as reporting workflows.",
+      "market_value": "Clients often pay more for a polished reporting layer than for raw operational tools because it makes delivery measurable and easier to share.",
+      "market_research": [
+        "Reporting portals are sticky because teams revisit them for exports, usage checks, and stakeholder reviews.",
+        "Existing job and saved-search data already gives this project a strong starting point.",
+        "A client-facing portal can differentiate the product from simple CSV-export workflows."
+      ],
+      "growth_chances": [
+        "Can become a retained client workspace",
+        "Supports premium reporting and white-label delivery",
+        "Can expand into alerts, dashboards, and scheduled exports"
+      ],
+      "benefits": [
+        "Better client retention through visibility",
+        "Reusable reporting workflows on top of existing data",
+        "Stronger perceived value than raw exports alone"
+      ],
+      "future_scope_ai": [
+        "AI-generated report summaries and trend narratives",
+        "AI recommendations for saved-search tuning",
+        "AI assistant for client questions about exports and usage"
+      ],
+      "project_features": [
+        "Reusable saved reports and report snapshots",
+        "Lead export and delivery center",
+        "Usage, billing, and reporting summaries"
+      ],
+      "suggested_pages": [
+        "Client dashboard",
+        "Saved report library",
+        "Lead export center",
+        "Usage and billing summary"
+      ]
+    },
+    {
+      "id": "agency-campaign-workspace",
+      "title": "Agency Campaign Workspace",
+      "priority": 40,
+      "tier": "exploratory",
+      "summary": "A separate campaign workspace for agencies managing multiple clients, searches, exports, and fulfillment status in one place.",
+      "why_now": "The current lead-generation and saved-search flows map naturally to multi-client campaign operations.",
+      "market_value": "Agencies need stronger multi-client coordination than a single-product dashboard usually offers, which makes this a good premium workflow product.",
+      "market_research": [
+        "Agencies often juggle many client searches, exports, and fulfillment deadlines at once.",
+        "Campaign and client separation increases operational clarity and billable workflow value.",
+        "A workspace model fits existing saved-search and job-delivery concepts well."
+      ],
+      "growth_chances": [
+        "Can evolve into a premium agency plan",
+        "Supports multi-tenant collaboration flows",
+        "Can expand into approvals, notes, and delivery SLAs"
+      ],
+      "benefits": [
+        "Cleaner client separation",
+        "Better campaign tracking",
+        "Higher-value workflow for agency teams"
+      ],
+      "future_scope_ai": [
+        "AI suggestions for next campaign actions",
+        "AI-generated client delivery summaries",
+        "AI-assisted prioritization of campaigns and exports"
+      ],
+      "project_features": [
+        "Multi-client saved search management",
+        "Campaign delivery tracking and export queues",
+        "Operator handoff and notes across client workspaces"
+      ],
+      "suggested_pages": [
+        "Agency overview dashboard",
+        "Client workspace list",
+        "Campaign fulfillment board",
+        "Export approvals and history"
+      ]
+    },
+    {
+      "id": "subscription-billing-hub",
+      "title": "Subscription Billing Hub",
+      "priority": 50,
+      "tier": "exploratory",
+      "summary": "A billing-focused product for plans, renewals, invoices, payment recovery, and credit package lifecycle management.",
+      "why_now": "The existing package purchase and payment status flows can be expanded into a dedicated billing experience.",
+      "market_value": "Billing is a direct revenue surface, so improving plan management and recovery has immediate business upside.",
+      "market_research": [
+        "Billing tools become more important once packages, renewals, and payment retries grow in complexity.",
+        "Customers expect receipts, invoices, renewals, and recovery flows to be more structured than a simple purchase screen.",
+        "A dedicated billing hub can serve both users and internal support teams."
+      ],
+      "growth_chances": [
+        "Can support recurring billing and subscriptions later",
+        "Creates room for invoice workflows and account finance tools",
+        "Pairs well with payment operations and support tooling"
+      ],
+      "benefits": [
+        "Improved payment recovery",
+        "Clearer billing experience for customers",
+        "Stronger finance workflow separation"
+      ],
+      "future_scope_ai": [
+        "AI detection of churn-risk billing patterns",
+        "AI-generated invoice and support summaries",
+        "AI-assisted retry timing and customer messaging suggestions"
+      ],
+      "project_features": [
+        "Plan lifecycle and renewal management",
+        "Invoice and payment recovery workflows",
+        "Billing analytics and support tooling"
+      ],
+      "suggested_pages": [
+        "Billing home",
+        "Plan and renewal management",
+        "Invoices and receipts",
+        "Failed payment recovery"
+      ]
+    },
+    {
+      "id": "ai-search-ops-studio",
+      "title": "AI Search Operations Studio",
+      "priority": 60,
+      "tier": "exploratory",
+      "summary": "A focused AI-assisted operations product for search strategy, saved-search tuning, retries, export quality, and operator workflows around lead-generation results.",
+      "why_now": "Your current product already centers on search, saved searches, jobs, and exports, so an AI-augmented operations layer is a natural extension.",
+      "market_value": "AI support becomes most defensible when it helps users run better search workflows, not when it adds generic chat to unrelated pages.",
+      "market_research": [
+        "Search-heavy teams need help refining queries, evaluating output quality, and deciding the next operational step.",
+        "Existing job, retry, lead, and saved-search data gives enough context for practical AI assistance.",
+        "AI is more useful here as an operator tool than as a generic page decoration."
+      ],
+      "growth_chances": [
+        "Can start as an internal operator console and later become a customer-facing premium feature",
+        "Supports workflow optimization, quality scoring, and smarter retries",
+        "Can expand into guided search planning and delivery recommendations"
+      ],
+      "benefits": [
+        "Keeps AI tied to a real workflow surface",
+        "Improves search quality and operator speed",
+        "Creates a differentiated feature set around search operations"
+      ],
+      "future_scope_ai": [
+        "AI query rewrite and keyword expansion suggestions",
+        "AI quality scoring for generated lead sets",
+        "AI next-step recommendations for retry, export, or saved-search actions"
+      ],
+      "build_requirements": [
+        "LLM API access for query rewrite, summarization, and recommendation flows",
+        "Prompt/version management for repeatable AI behavior",
+        "Search-result evaluation pipeline tied to saved searches, jobs, and lead quality",
+        "Background job execution for AI suggestions so UI stays responsive",
+        "Usage logging, guardrails, and feedback capture for AI outputs"
+      ],
+      "ai_tools": [
+        "OpenAI Responses API for query rewrite, summaries, and recommended actions",
+        "Prompt templates stored per workflow step",
+        "Optional vector search later for similar saved-search patterns and operator memory"
+      ],
+      "example_user": {
+        "persona": "Solo lead-generation operator or small sales ops team",
+        "scenario": "You run ten saved searches every week. The AI studio tells you which searches are weak, suggests better keywords and locations, highlights low-quality result sets, and recommends whether to retry, refine, or export."
+      },
+      "competitors": [
+        {
+          "name": "Apollo",
+          "website": "https://www.apollo.io/",
+          "pricing_summary": "Apollo publicly highlights paid plans such as Basic at $59/user/month, Professional at $99/user/month, and Organization at $149/user/month.",
+          "fit": "Strong sales intelligence and outbound workflow competitor."
+        },
+        {
+          "name": "Clay",
+          "website": "https://www.clay.com/",
+          "pricing_summary": "Clay help pages describe plans starting from $149/month, with newer Launch plans starting at $185/month and Growth at $495/month.",
+          "fit": "Strong workflow automation and AI enrichment competitor."
+        },
+        {
+          "name": "Instantly",
+          "website": "https://instantly.ai/",
+          "pricing_summary": "Instantly pricing pages show Growth around $37-$47/month and Hypergrowth around $97/month depending on product and billing cadence.",
+          "fit": "Strong outbound execution and lead workflow competitor."
+        }
+      ],
+      "market_pricing": {
+        "competitor_range": "$37/month to $495+/month depending on product depth and workflow scope",
+        "our_offer": "A narrower AI search-operations product focused on saved searches, retries, quality review, and export guidance instead of a full sales platform.",
+        "our_starting_price": "$49/month solo plan, $149/month team ops plan, custom for agency or enterprise workflows"
+      },
+      "cost_estimate": {
+        "build_cost": "Rough MVP build cost: 3 to 5 engineer-weeks if built on the current stack and existing search/job data model.",
+        "monthly_run_cost": "Low early run cost if AI usage is scoped to recommendations and summaries. Model cost should usually be far below a full outbound-data platform.",
+        "cost_drivers": [
+          "LLM tokens per recommendation or summary",
+          "Background job volume for batch analysis",
+          "Any external enrichment or crawling added later"
+        ]
+      },
+      "what_extra_we_give": [
+        "AI help tied directly to the user's current saved-search and job state",
+        "Recommendations grounded in actual retry, export, and search-quality workflow actions",
+        "A cleaner operator UI than broad all-in-one sales platforms for this narrow use case"
+      ],
+      "research_sources": [
+        {
+          "label": "Apollo pricing references",
+          "url": "https://www.apollo.io/magazine/lead-generation-tools"
+        },
+        {
+          "label": "Clay pricing references",
+          "url": "https://www.clay.com/faq/what-is-changing"
+        },
+        {
+          "label": "Clay cost FAQ",
+          "url": "https://www.clay.com/faq/how-much-does-it-cost"
+        },
+        {
+          "label": "Instantly pricing",
+          "url": "https://instantly.ai/pricing"
+        },
+        {
+          "label": "OpenAI API pricing",
+          "url": "https://openai.com/api/pricing/"
+        }
+      ],
+      "project_features": [
+        "AI-assisted saved-search tuning",
+        "Search result quality review workspace",
+        "Recommended retry and export actions"
+      ],
+      "suggested_pages": [
+        "Search strategy dashboard",
+        "Saved-search optimizer",
+        "Lead quality review",
+        "Retry and export recommendations"
+      ]
+    }
+  ]
+}

@@ -68,6 +68,14 @@ def pick_next_suggested_feature(manifests: List[FeatureManifest]) -> FeatureMani
     return suggested[0]
 
 
+def find_feature_by_id(manifests: List[FeatureManifest], feature_id: str) -> FeatureManifest:
+    normalized = feature_id.strip()
+    for manifest in manifests:
+        if manifest.id == normalized:
+            return manifest
+    raise ValueError(f"Feature manifest not found: {feature_id}")
+
+
 def save_feature_manifest(data: dict[str, Any], features_dir: Path = FEATURES_DIR) -> Path:
     features_dir.mkdir(parents=True, exist_ok=True)
     path = features_dir / f"{_slugify(data['id'])}.json"

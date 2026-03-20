@@ -14,6 +14,7 @@ from automation.codex_runner import (
 from automation.discovery import discover_features
 from automation.feature_store import (
     FEATURES_DIR,
+    find_feature_by_id,
     load_feature_manifests,
     pick_next_approved_feature,
     pick_next_suggested_feature,
@@ -46,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execute-codex", action="store_true")
     parser.add_argument("--execute-validation", action="store_true")
     parser.add_argument("--execute-prs", action="store_true")
+    parser.add_argument("--feature-id", type=str, default="")
     return parser.parse_args()
 
 
@@ -85,34 +87,53 @@ def main() -> int:
         )
 
     manifests = load_feature_manifests(args.features_dir)
-    try:
-        feature = pick_next_approved_feature(manifests)
-        stage_results.append(
-            StageResult("feature_selection", "done", f"Selected approved feature: {feature.id}")
-        )
-    except ValueError:
-        if not args.auto_approve:
-            return _finish(
-                args,
-                None,
-                stage_results or [StageResult("feature_selection", "skipped", "No approved feature manifests found.")],
-            )
+    if args.feature_id.strip():
         try:
-            feature = pick_next_suggested_feature(manifests)
+            feature = find_feature_by_id(manifests, args.feature_id.strip())
         except ValueError:
             return _finish(
                 args,
                 None,
-                stage_results or [StageResult("feature_selection", "skipped", "No approved or suggested feature manifests found.")],
+                stage_results or [StageResult("feature_selection", "failed", f"Feature not found: {args.feature_id.strip()}")],
             )
-
+        if feature.status not in {"approved", "in_progress"}:
+            return _finish(
+                args,
+                feature,
+                stage_results or [StageResult("feature_selection", "failed", f"Feature must be approved before execution: {feature.id}")],
+            )
         stage_results.append(
-            StageResult("feature_selection", "done", f"Auto-approved suggested feature: {feature.id}")
+            StageResult("feature_selection", "done", f"Selected explicit feature: {feature.id}")
         )
-        if not args.dry_run:
-            update_feature_manifest_status(feature, "approved")
-            manifests = load_feature_manifests(args.features_dir)
+    else:
+        try:
             feature = pick_next_approved_feature(manifests)
+            stage_results.append(
+                StageResult("feature_selection", "done", f"Selected approved feature: {feature.id}")
+            )
+        except ValueError:
+            if not args.auto_approve:
+                return _finish(
+                    args,
+                    None,
+                    stage_results or [StageResult("feature_selection", "skipped", "No approved feature manifests found.")],
+                )
+            try:
+                feature = pick_next_suggested_feature(manifests)
+            except ValueError:
+                return _finish(
+                    args,
+                    None,
+                    stage_results or [StageResult("feature_selection", "skipped", "No approved or suggested feature manifests found.")],
+                )
+
+            stage_results.append(
+                StageResult("feature_selection", "done", f"Auto-approved suggested feature: {feature.id}")
+            )
+            if not args.dry_run:
+                update_feature_manifest_status(feature, "approved")
+                manifests = load_feature_manifests(args.features_dir)
+                feature = pick_next_approved_feature(manifests)
 
     issues = validate_feature_manifest(feature)
     if issues:
