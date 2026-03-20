@@ -18,11 +18,13 @@ def create_app():
     from app.auth import bp as auth_bp
     from app.admin import bp as admin_bp
     from app.payments import bp as payments_bp
-    from app.lead_gen import blueprints as lead_gen_blueprints
+    from app.projects.analyzer import bp as analyzer_bp
+    from app.projects.lead_gen import blueprints as lead_gen_blueprints
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(analyzer_bp)
     
     for bp in lead_gen_blueprints:
         app.register_blueprint(bp)
@@ -41,6 +43,7 @@ def create_app():
             'modules': {
                 'auth': '/api/auth',
                 'lead_gen': '/api/lead_gen',
+                'analyzer': '/api/analyzer',
                 'admin': '/api/admin',
                 'payments': '/api/payments'
             }

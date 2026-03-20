@@ -10,10 +10,8 @@ from rq import Queue, Worker, SimpleWorker
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.config import Config
-from app.core.exceptions import ExtractionError
-from app.lead_gen.jobs import model as jobs_model
-from app.lead_gen.leads import model as leads_model
-from app.lead_gen.credits import pipeline as credits_pipeline
+from app.projects.lead_gen.jobs import model as jobs_model
+from app.projects.lead_gen.credits import pipeline as credits_pipeline
 
 redis_conn = Redis.from_url(Config.REDIS_URL)
 queue = Queue('lead_gen', connection=redis_conn)
@@ -28,7 +26,7 @@ def process_extraction_job(job_id):
     
     try:
         # Use the real scraper instead of dummy data
-        from app.lead_gen.jobs.scraping.maps import MapsScraper
+        from app.projects.lead_gen.jobs.scraping.maps import MapsScraper
         scraper = MapsScraper(job_id)
         scraper.run()
         

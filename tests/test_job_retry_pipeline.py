@@ -2,8 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app.core.exceptions import JobStatusError, NotFoundError
-from app.lead_gen.jobs import model as jobs_model
-from app.lead_gen.jobs import pipeline
+from app.projects.lead_gen.jobs import model as jobs_model, pipeline
 
 
 class JobRetryPipelineTestCase(unittest.TestCase):

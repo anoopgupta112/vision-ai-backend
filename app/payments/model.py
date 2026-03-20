@@ -5,7 +5,7 @@ from datetime import datetime
 from bson import ObjectId
 from app.core.database import get_collection
 
-COLLECTION = 'payment_transactions'
+COLLECTION = 'lead_payment_transactions'
 
 STATUS_PENDING = 'pending'
 STATUS_SUCCESS = 'success'

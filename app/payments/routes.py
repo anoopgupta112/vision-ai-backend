@@ -7,7 +7,7 @@ import io
 from flask import Blueprint, Response, request, jsonify, current_app
 from app.core.middleware import auth_required, get_current_user
 from app.payments import service, model
-from app.lead_gen.credits import model as credits_model
+from app.projects.lead_gen.credits import model as credits_model
 
 bp = Blueprint('payments', __name__, url_prefix='/api/payments')
 
