@@ -2,6 +2,7 @@ import os
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    CODING_DASHBOARD = os.environ.get('CODING_DASHBOARD', '')
     MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017')
     MONGODB_DATABASE = os.environ.get('MONGODB_DATABASE', 'platform_db')
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')

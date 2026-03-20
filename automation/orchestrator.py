@@ -14,6 +14,7 @@ from automation.codex_runner import (
 from automation.discovery import discover_features
 from automation.feature_store import (
     FEATURES_DIR,
+    find_feature_by_id,
     load_feature_manifests,
     pick_next_approved_feature,
     pick_next_suggested_feature,
@@ -23,7 +24,7 @@ from automation.models import FeatureManifest, StageResult
 from automation.preflight import run_preflight
 from automation.push_manager import execute_branch_push, plan_branch_push
 from automation.pr_manager import execute_pull_requests, plan_pull_requests
-from automation.state_store import STATE_FILE, append_stage_result, mark_feature_in_progress
+from automation.state_store import STATE_FILE, append_stage_result, mark_feature_in_progress, set_feature_status
 from automation.validator import validate_feature_manifest
 from automation.validation_runner import execute_validation_run, plan_validation_run
 from automation.webhook import send_run_webhook
@@ -46,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execute-codex", action="store_true")
     parser.add_argument("--execute-validation", action="store_true")
     parser.add_argument("--execute-prs", action="store_true")
+    parser.add_argument("--feature-id", type=str, default="")
     return parser.parse_args()
 
 
@@ -76,47 +78,77 @@ def main() -> int:
             features_dir=args.features_dir,
             write=True,
         )
-        stage_results.append(
+        _add_stage(
+            stage_results,
             StageResult(
                 name="discovery",
                 status="done",
                 detail=f"Discovered {len(suggestions)} new suggested feature(s).",
-            )
+            ),
+            args,
         )
 
     manifests = load_feature_manifests(args.features_dir)
-    try:
-        feature = pick_next_approved_feature(manifests)
-        stage_results.append(
-            StageResult("feature_selection", "done", f"Selected approved feature: {feature.id}")
-        )
-    except ValueError:
-        if not args.auto_approve:
-            return _finish(
-                args,
-                None,
-                stage_results or [StageResult("feature_selection", "skipped", "No approved feature manifests found.")],
-            )
+    if args.feature_id.strip():
         try:
-            feature = pick_next_suggested_feature(manifests)
+            feature = find_feature_by_id(manifests, args.feature_id.strip())
         except ValueError:
             return _finish(
                 args,
                 None,
-                stage_results or [StageResult("feature_selection", "skipped", "No approved or suggested feature manifests found.")],
+                stage_results or [StageResult("feature_selection", "failed", f"Feature not found: {args.feature_id.strip()}")],
             )
-
-        stage_results.append(
-            StageResult("feature_selection", "done", f"Auto-approved suggested feature: {feature.id}")
+        if feature.status not in {"approved", "in_progress"}:
+            return _finish(
+                args,
+                feature,
+                stage_results or [StageResult("feature_selection", "failed", f"Feature must be approved before execution: {feature.id}")],
+            )
+        _add_stage(
+            stage_results,
+            StageResult("feature_selection", "done", f"Selected explicit feature: {feature.id}"),
+            args,
+            feature,
         )
-        if not args.dry_run:
-            update_feature_manifest_status(feature, "approved")
-            manifests = load_feature_manifests(args.features_dir)
+    else:
+        try:
             feature = pick_next_approved_feature(manifests)
+            _add_stage(
+                stage_results,
+                StageResult("feature_selection", "done", f"Selected approved feature: {feature.id}"),
+                args,
+                feature,
+            )
+        except ValueError:
+            if not args.auto_approve:
+                return _finish(
+                    args,
+                    None,
+                    stage_results or [StageResult("feature_selection", "skipped", "No approved feature manifests found.")],
+                )
+            try:
+                feature = pick_next_suggested_feature(manifests)
+            except ValueError:
+                return _finish(
+                    args,
+                    None,
+                    stage_results or [StageResult("feature_selection", "skipped", "No approved or suggested feature manifests found.")],
+                )
+
+            _add_stage(
+                stage_results,
+                StageResult("feature_selection", "done", f"Auto-approved suggested feature: {feature.id}"),
+                args,
+                feature,
+            )
+            if not args.dry_run:
+                update_feature_manifest_status(feature, "approved")
+                manifests = load_feature_manifests(args.features_dir)
+                feature = pick_next_approved_feature(manifests)
 
     issues = validate_feature_manifest(feature)
     if issues:
-        stage_results.append(StageResult("spec_validation", "failed", "; ".join(issues)))
+        _add_stage(stage_results, StageResult("spec_validation", "failed", "; ".join(issues)), args, feature)
         if not args.dry_run:
             update_feature_manifest_status(feature, "rejected")
         return _finish(args, feature, stage_results)
@@ -127,16 +159,17 @@ def main() -> int:
         require_github=args.execute_prs,
         require_webhook=bool(args.webhook_url),
     )
-    stage_results.append(preflight_stage)
+    _add_stage(stage_results, preflight_stage, args, feature)
     if _is_failed(preflight_stage):
         return _finish(args, feature, stage_results)
 
-    stage_results.append(StageResult("spec_validation", "done", f"Validated feature manifest: {feature.id}"))
+    _add_stage(stage_results, StageResult("spec_validation", "done", f"Validated feature manifest: {feature.id}"), args, feature)
     if not args.dry_run:
         update_feature_manifest_status(feature, "in_progress")
+        mark_feature_in_progress(feature.id, args.state_file)
 
     branch_stage = execute_branch_preparation(feature) if args.execute_branches else plan_branch_preparation(feature)
-    stage_results.append(branch_stage)
+    _add_stage(stage_results, branch_stage, args, feature)
     if _is_failed(branch_stage):
         return _finish(args, feature, stage_results)
 
@@ -145,7 +178,7 @@ def main() -> int:
     for attempt in range(1, max(args.max_retries, 1) + 1):
         if args.execute_codex:
             backend_codex_stage = execute_backend_codex_run(feature, extra_context=retry_context, attempt=attempt)
-            stage_results.append(backend_codex_stage)
+            _add_stage(stage_results, backend_codex_stage, args, feature)
             if _is_exhausted(backend_codex_stage):
                 terminal_failure = True
                 break
@@ -157,7 +190,7 @@ def main() -> int:
                 continue
 
             frontend_codex_stage = execute_frontend_codex_run(feature, extra_context=retry_context, attempt=attempt)
-            stage_results.append(frontend_codex_stage)
+            _add_stage(stage_results, frontend_codex_stage, args, feature)
             if _is_exhausted(frontend_codex_stage):
                 terminal_failure = True
                 break
@@ -168,12 +201,12 @@ def main() -> int:
                     break
                 continue
         else:
-            stage_results.append(plan_backend_codex_run(feature, extra_context=retry_context, attempt=attempt))
-            stage_results.append(plan_frontend_codex_run(feature, extra_context=retry_context, attempt=attempt))
+            _add_stage(stage_results, plan_backend_codex_run(feature, extra_context=retry_context, attempt=attempt), args, feature)
+            _add_stage(stage_results, plan_frontend_codex_run(feature, extra_context=retry_context, attempt=attempt), args, feature)
 
         validation_stage = execute_validation_run(feature) if args.execute_validation else plan_validation_run(feature)
         validation_stage.name = f"validation_attempt_{attempt}"
-        stage_results.append(validation_stage)
+        _add_stage(stage_results, validation_stage, args, feature)
 
         if not _is_failed(validation_stage):
             break
@@ -183,24 +216,30 @@ def main() -> int:
             terminal_failure = True
             break
 
-        stage_results.append(
+        _add_stage(
+            stage_results,
             StageResult(
                 name=f"retry_attempt_{attempt}",
                 status="done",
                 detail=f"Retrying Codex after validation failure: attempt {attempt + 1} of {args.max_retries}.",
-            )
+            ),
+            args,
+            feature,
         )
 
     if terminal_failure and not (args.execute_prs and args.force_prs):
         return _finish(args, feature, stage_results)
 
     if terminal_failure and args.execute_prs and args.force_prs:
-        stage_results.append(
+        _add_stage(
+            stage_results,
             StageResult(
                 "failure_override",
                 "done",
                 "Automation failed or Codex was exhausted, but PR creation was forced by --force-prs.",
-            )
+            ),
+            args,
+            feature,
         )
 
     push_stage = (
@@ -208,7 +247,7 @@ def main() -> int:
         if args.execute_pushes
         else plan_branch_push(feature)
     )
-    stage_results.append(push_stage)
+    _add_stage(stage_results, push_stage, args, feature)
     if _is_failed(push_stage) and not (args.execute_prs and args.force_prs):
         return _finish(args, feature, stage_results)
 
@@ -217,7 +256,7 @@ def main() -> int:
         if args.execute_prs
         else plan_pull_requests(feature, stage_results, draft=_should_open_draft_pr(stage_results))
     )
-    stage_results.append(pr_stage)
+    _add_stage(stage_results, pr_stage, args, feature)
 
     return _finish(args, feature, stage_results)
 
@@ -235,17 +274,8 @@ def _finish(args: argparse.Namespace, feature: Optional[FeatureManifest], stage_
     if args.dry_run or feature is None:
         return 0
 
-    mark_feature_in_progress(feature.id, args.state_file)
-    for stage_result in stage_results:
-        append_stage_result(
-            feature.id,
-            stage_result.name,
-            stage_result.status,
-            stage_result.detail,
-            args.state_file,
-        )
-
     _sync_feature_manifest_status(feature, stage_results)
+    _sync_feature_run_status(feature.id, stage_results, args.state_file)
 
     return 0 if not _has_failures(stage_results) else 1
 
@@ -300,6 +330,38 @@ def _sync_feature_manifest_status(feature: FeatureManifest, stage_results: List[
 
     if feature.status != "in_progress":
         update_feature_manifest_status(feature, "in_progress")
+
+
+def _add_stage(
+    stage_results: List[StageResult],
+    stage_result: StageResult,
+    args: argparse.Namespace,
+    feature: Optional[FeatureManifest] = None,
+) -> None:
+    stage_results.append(stage_result)
+    if args.dry_run or feature is None:
+        return
+    append_stage_result(
+        feature.id,
+        stage_result.name,
+        stage_result.status,
+        stage_result.detail,
+        args.state_file,
+    )
+
+
+def _sync_feature_run_status(feature_id: str, stage_results: List[StageResult], state_file: Path) -> None:
+    by_name = {stage.name: stage for stage in stage_results}
+    if "pull_requests" in by_name and by_name["pull_requests"].status == "done":
+        set_feature_status(feature_id, "pr_opened", state_file)
+        return
+    if "spec_validation" in by_name and by_name["spec_validation"].status == "failed":
+        set_feature_status(feature_id, "rejected", state_file)
+        return
+    if any(stage.status in {"failed", "exhausted"} for stage in stage_results):
+        set_feature_status(feature_id, "approved", state_file)
+        return
+    set_feature_status(feature_id, "in_progress", state_file)
 
 
 if __name__ == "__main__":

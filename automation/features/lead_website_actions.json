@@ -1,0 +1,21 @@
+{
+  "id": "lead-website-actions",
+  "title": "Add lead website preview and quick actions",
+  "status": "in_progress",
+  "priority": 85,
+  "category": "data_features",
+  "backend_repo": "/Users/anoopchandra/repositories/main_dashboard",
+  "frontend_repo": "/Users/anoopchandra/repositories/main_dashboard_frontend",
+  "branches": {
+    "backend": "agent/lead-website-actions-backend",
+    "frontend": "agent/lead-website-actions-frontend"
+  },
+  "acceptance_criteria": [
+    "Users can open or preview lead websites directly from lead workflows",
+    "Website-related actions are accessible from lead rows or lead details",
+    "Lead and export workflows remain green"
+  ],
+  "api_contract": [
+    "GET /api/lead_gen/leads/job/:id"
+  ]
+}

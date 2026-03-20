@@ -139,6 +139,44 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         retry_user_job.assert_called_once_with("job-1", "user-1")
 
     @patch("app.lead_gen.leads.routes.pipeline.get_leads_for_job")
+    def test_get_leads_by_job_returns_website_actions(self, get_leads_for_job):
+        get_leads_for_job.return_value = [
+            {
+                "_id": "lead-1",
+                "name": "ACME Plumbing",
+                "phone": "1234567890",
+                "email": "hello@example.com",
+                "website": "example.com",
+                "address": "Mumbai",
+                "source": "google_maps",
+            }
+        ]
+
+        decode_token, find_user = self._auth_patches()
+        with decode_token, find_user:
+            response = self.client.get(
+                "/api/lead_gen/leads/job/job-1?limit=25&skip=10",
+                headers=self.auth_headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["count"], 1)
+        lead = response.get_json()["leads"][0]
+        self.assertEqual(lead["website"], "example.com")
+        self.assertEqual(lead["website_url"], "https://example.com")
+        self.assertEqual(lead["website_domain"], "example.com")
+        self.assertEqual(
+            lead["website_actions"],
+            {
+                "can_open": True,
+                "can_preview": True,
+                "open_url": "https://example.com",
+                "preview_url": "https://example.com",
+            },
+        )
+        get_leads_for_job.assert_called_once_with("job-1", "user-1", 25, 10)
+
+    @patch("app.lead_gen.leads.routes.pipeline.get_leads_for_job")
     def test_download_csv_returns_expected_headers_and_rows(self, get_leads_for_job):
         get_leads_for_job.return_value = [
             {

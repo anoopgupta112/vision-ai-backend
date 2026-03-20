@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automation Dashboard</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --panel: #fffaf0;
+      --panel-border: #d7c8a9;
+      --text: #1d1b16;
+      --muted: #6b6457;
+      --accent: #1f6f5f;
+      --accent-soft: #dcefe9;
+      --warn: #8c5a15;
+      --warn-soft: #f7e5c5;
+      --active: #234f88;
+      --active-soft: #dce7f7;
+      --success: #276749;
+      --success-soft: #dcf0e1;
+      --danger: #922b21;
+      --danger-soft: #f7dfdb;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background:
+        radial-gradient(circle at top left, rgba(31, 111, 95, 0.12), transparent 30%),
+        linear-gradient(180deg, #f7f3eb 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    .hero {
+      padding: 28px;
+      border: 1px solid var(--panel-border);
+      background: linear-gradient(140deg, rgba(255, 250, 240, 0.96), rgba(239, 246, 243, 0.94));
+      border-radius: 22px;
+      box-shadow: 0 18px 60px rgba(72, 55, 25, 0.08);
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(30px, 5vw, 56px);
+      line-height: 0.95;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr;
+      margin-top: 24px;
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.74);
+      border: 1px solid rgba(215, 200, 169, 0.7);
+    }
+
+    .control-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    input, button, textarea, select {
+      font: inherit;
+    }
+
+    input[type="password"], input[type="text"], select {
+      flex: 1 1 420px;
+      min-width: 220px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background: #fff;
+      color: var(--text);
+    }
+
+    button {
+      padding: 12px 16px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      background: var(--text);
+      color: #fff;
+      transition: transform 140ms ease, opacity 140ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .button-secondary {
+      background: #e7dfcf;
+      color: var(--text);
+    }
+
+    .tab-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 22px 0 0;
+    }
+
+    .tab-button {
+      background: #e7dfcf;
+      color: var(--text);
+    }
+
+    .tab-button.active {
+      background: var(--text);
+      color: #fff;
+    }
+
+    .status-line {
+      min-height: 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .card {
+      background: rgba(255, 250, 240, 0.94);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 26px rgba(72, 55, 25, 0.06);
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .card-head p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .pill-suggested { background: var(--warn-soft); color: var(--warn); }
+    .pill-approved { background: var(--accent-soft); color: var(--accent); }
+    .pill-in_progress { background: var(--active-soft); color: var(--active); }
+    .pill-pr_opened, .pill-merged { background: var(--success-soft); color: var(--success); }
+    .pill-rejected { background: var(--danger-soft); color: var(--danger); }
+    .pill-default { background: #ece7db; color: var(--muted); }
+
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 16px 0 8px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      color: #2c2820;
+    }
+
+    .meta {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .stage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .stage {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(231, 223, 207, 0.52);
+      border: 1px solid rgba(215, 200, 169, 0.52);
+    }
+
+    .stage strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    pre.log-tail {
+      margin: 10px 0 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: #1f1d18;
+      color: #f2ebda;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .loading-card {
+      min-height: 220px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .loading-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+      transform: translateX(-100%);
+      animation: loading-slide 1.2s linear infinite;
+    }
+
+    .loading-block {
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(215, 200, 169, 0.55);
+      margin-bottom: 12px;
+    }
+
+    .progress {
+      margin-top: 18px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(215, 200, 169, 0.45);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 45%;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #d2b77f, #1f6f5f);
+      animation: progress-loop 1.4s ease-in-out infinite;
+      transform-origin: left center;
+    }
+
+    @keyframes loading-slide {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(100%); }
+    }
+
+    @keyframes progress-loop {
+      0% { transform: translateX(-60%) scaleX(0.7); }
+      50% { transform: translateX(60%) scaleX(1); }
+      100% { transform: translateX(180%) scaleX(0.7); }
+    }
+
+    .empty {
+      padding: 28px;
+      border-radius: 18px;
+      background: rgba(255, 250, 240, 0.78);
+      border: 1px dashed var(--panel-border);
+      color: var(--muted);
+      text-align: center;
+      margin-top: 28px;
+    }
+
+    @media (max-width: 720px) {
+      .shell { padding: 20px 14px 40px; }
+      .hero { padding: 22px; }
+      .controls { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Manual Automation Control</p>
+      <h1>Project Automation Board</h1>
+      <p>Switch between project-level ideas and in-project feature work, inspect automation status, and approve only the work you want to run manually.</p>
+
+      <div class="controls">
+        <div class="control-row">
+          <input id="tokenInput" type="password" placeholder="Paste CODING_DASHBOARD value from local .env">
+          <button id="saveTokenButton" type="button">Save Key</button>
+          <button id="refreshButton" class="button-secondary" type="button">Refresh</button>
+        </div>
+        <div class="control-row">
+          <input id="backendRepoInput" type="text" placeholder="Backend repo path">
+          <input id="frontendRepoInput" type="text" placeholder="Frontend repo path">
+        </div>
+        <div class="control-row">
+          <select id="featureCategorySelect">
+            <option value="">All Feature Types</option>
+          </select>
+        </div>
+        <div class="tab-row">
+          <button id="featuresTabButton" class="tab-button active" type="button">Project Features</button>
+          <button id="projectsTabButton" class="tab-button" type="button">Projects</button>
+        </div>
+        <div class="status-line" id="statusLine">Add the CODING_DASHBOARD key from your local .env, then refresh to load features.</div>
+      </div>
+    </section>
+
+    <section class="card" id="contextCard" hidden>
+      <div class="card-head">
+        <div>
+          <h2>Discovery Skill Context</h2>
+          <p id="contextProjectName"></p>
+        </div>
+        <span class="pill pill-approved" id="templateCountPill">0 templates</span>
+      </div>
+      <div class="meta" id="contextSummary"></div>
+      <div class="section-label">Discovery Goals</div>
+      <ul id="contextGoals"></ul>
+      <div class="section-label">Backend Context</div>
+      <ul id="contextBackend"></ul>
+      <div class="section-label">Frontend Context</div>
+      <ul id="contextFrontend"></ul>
+    </section>
+
+    <section class="card" id="candidatesCard" hidden>
+      <div class="card-head">
+        <div>
+          <h2>Features On This Project</h2>
+          <p>Live discovery results for the selected backend and frontend repos. Approving a candidate writes its manifest and marks it approved.</p>
+        </div>
+        <span class="pill pill-suggested" id="candidateCountPill">0 candidates</span>
+      </div>
+      <div class="control-row">
+        <button id="suggestMoreFeaturesButton" type="button">Suggest More Features</button>
+      </div>
+      <section id="candidatesRoot" class="grid"></section>
+      <div id="candidateEmptyState" class="empty" hidden>No new discovery candidates are available right now.</div>
+    </section>
+
+    <section class="card" id="projectIdeasCard" hidden>
+      <div class="card-head">
+        <div>
+          <h2>Project Suggestions</h2>
+          <p>Broader project ideas derived from the same context, including pages and feature areas that belong to each proposed project.</p>
+        </div>
+        <span class="pill pill-approved" id="projectIdeaCountPill">0 projects</span>
+      </div>
+      <div class="control-row">
+        <button id="suggestMoreProjectsButton" class="button-secondary" type="button">Suggest More Projects</button>
+      </div>
+      <section id="projectIdeasRoot" class="grid"></section>
+      <div id="projectIdeasEmptyState" class="empty" hidden>No project ideas are configured.</div>
+    </section>
+
+    <section id="featuresRoot" class="grid"></section>
+    <div id="emptyState" class="empty" hidden>No automation feature manifests were found.</div>
+  </main>
+
+  <script>
+    const tokenInput = document.getElementById('tokenInput');
+    const saveTokenButton = document.getElementById('saveTokenButton');
+    const refreshButton = document.getElementById('refreshButton');
+    const featuresTabButton = document.getElementById('featuresTabButton');
+    const projectsTabButton = document.getElementById('projectsTabButton');
+    const suggestMoreFeaturesButton = document.getElementById('suggestMoreFeaturesButton');
+    const suggestMoreProjectsButton = document.getElementById('suggestMoreProjectsButton');
+    const backendRepoInput = document.getElementById('backendRepoInput');
+    const frontendRepoInput = document.getElementById('frontendRepoInput');
+    const featureCategorySelect = document.getElementById('featureCategorySelect');
+    const statusLine = document.getElementById('statusLine');
+    const featuresRoot = document.getElementById('featuresRoot');
+    const emptyState = document.getElementById('emptyState');
+    const candidatesCard = document.getElementById('candidatesCard');
+    const candidatesRoot = document.getElementById('candidatesRoot');
+    const candidateEmptyState = document.getElementById('candidateEmptyState');
+    const candidateCountPill = document.getElementById('candidateCountPill');
+    const projectIdeasCard = document.getElementById('projectIdeasCard');
+    const projectIdeasRoot = document.getElementById('projectIdeasRoot');
+    const projectIdeasEmptyState = document.getElementById('projectIdeasEmptyState');
+    const projectIdeaCountPill = document.getElementById('projectIdeaCountPill');
+    const contextCard = document.getElementById('contextCard');
+    const contextProjectName = document.getElementById('contextProjectName');
+    const contextSummary = document.getElementById('contextSummary');
+    const contextGoals = document.getElementById('contextGoals');
+    const contextBackend = document.getElementById('contextBackend');
+    const contextFrontend = document.getElementById('contextFrontend');
+    const templateCountPill = document.getElementById('templateCountPill');
+
+    const STORAGE_KEY = 'automation_dashboard_token';
+    const BACKEND_REPO_KEY = 'automation_dashboard_backend_repo';
+    const FRONTEND_REPO_KEY = 'automation_dashboard_frontend_repo';
+    const FEATURE_EXPLORATORY_KEY = 'automation_dashboard_include_exploratory_features';
+    const FEATURE_CATEGORY_KEY = 'automation_dashboard_feature_category';
+    const PROJECT_EXPLORATORY_KEY = 'automation_dashboard_include_exploratory_projects';
+    const PROJECT_LIMIT_KEY = 'automation_dashboard_project_limit';
+    const PROJECT_SEARCH_DEPTH_KEY = 'automation_dashboard_project_search_depth';
+    const TAB_KEY = 'automation_dashboard_tab';
+
+    tokenInput.value = localStorage.getItem(STORAGE_KEY) || '';
+    backendRepoInput.value = localStorage.getItem(BACKEND_REPO_KEY) || '';
+    frontendRepoInput.value = localStorage.getItem(FRONTEND_REPO_KEY) || '';
+    featureCategorySelect.value = localStorage.getItem(FEATURE_CATEGORY_KEY) || '';
+    let includeExploratoryFeatures = localStorage.getItem(FEATURE_EXPLORATORY_KEY) === 'true';
+    let includeExploratoryProjects = localStorage.getItem(PROJECT_EXPLORATORY_KEY) === 'true';
+    let projectLimit = Number(localStorage.getItem(PROJECT_LIMIT_KEY) || '3');
+    let projectSearchDepth = Number(localStorage.getItem(PROJECT_SEARCH_DEPTH_KEY) || '1');
+    let projectTotalAvailable = 0;
+    let activeTab = localStorage.getItem(TAB_KEY) || 'features';
+    let autoRefreshHandle = null;
+
+    function setStatus(message, isError = false) {
+      statusLine.textContent = message;
+      statusLine.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+    }
+
+    function syncAutoRefresh(features) {
+      const hasInProgress = (features || []).some((feature) => feature.run_status === 'in_progress');
+      if (hasInProgress && !autoRefreshHandle) {
+        autoRefreshHandle = window.setInterval(async () => {
+          try {
+            await loadFeatures({ silent: true });
+          } catch (_) {
+          }
+        }, 4000);
+      }
+      if (!hasInProgress && autoRefreshHandle) {
+        window.clearInterval(autoRefreshHandle);
+        autoRefreshHandle = null;
+      }
+    }
+
+    function getToken() {
+      return tokenInput.value.trim();
+    }
+
+    function getRepoSelection() {
+      return {
+        backend_repo: backendRepoInput.value.trim(),
+        frontend_repo: frontendRepoInput.value.trim(),
+      };
+    }
+
+    function renderFeatureCategories(categories) {
+      const selected = featureCategorySelect.value;
+      featureCategorySelect.innerHTML = '<option value="">All Feature Types</option>';
+      for (const category of categories || []) {
+        const option = document.createElement('option');
+        option.value = category.key;
+        option.textContent = category.label;
+        featureCategorySelect.appendChild(option);
+      }
+      featureCategorySelect.value = selected;
+    }
+
+    function setActiveTab(nextTab) {
+      activeTab = nextTab;
+      localStorage.setItem(TAB_KEY, nextTab);
+      const featuresActive = nextTab === 'features';
+      featuresTabButton.classList.toggle('active', featuresActive);
+      projectsTabButton.classList.toggle('active', !featuresActive);
+      candidatesCard.hidden = !featuresActive;
+      featuresRoot.hidden = !featuresActive;
+      emptyState.hidden = !featuresActive || featuresRoot.children.length > 0;
+      projectIdeasCard.hidden = featuresActive;
+    }
+
+    function pillClass(status) {
+      return `pill pill-${String(status || '').replace(/[^a-z_]/g, '') || 'default'}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderFeatures(features) {
+      featuresRoot.innerHTML = '';
+      emptyState.hidden = activeTab !== 'features' || features.length > 0;
+
+      for (const feature of features) {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const acceptance = feature.acceptance_criteria.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+        const apiContract = feature.api_contract.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+        const recentLogs = (feature.recent_logs || []).length
+          ? escapeHtml(feature.recent_logs.join('\n'))
+          : 'No logs recorded yet.';
+        const stages = (feature.stages || []).length
+          ? feature.stages.map((stage) => `
+            <div class="stage">
+              <strong>${escapeHtml(stage.name)} · ${escapeHtml(stage.status)}</strong>
+              <div>${escapeHtml(stage.detail)}</div>
+            </div>
+          `).join('')
+          : '<div class="stage"><strong>No run history yet</strong><div>This feature has not recorded any stage results.</div></div>';
+
+        card.innerHTML = `
+          <div class="card-head">
+            <div>
+              <h2>${escapeHtml(feature.title)}</h2>
+              <p>${escapeHtml(feature.id)}</p>
+            </div>
+            <span class="${pillClass(feature.status)}">${escapeHtml(feature.status)}</span>
+          </div>
+
+          <div class="meta">
+            <div><strong>Priority:</strong> ${escapeHtml(feature.priority)}</div>
+            <div><strong>Backend branch:</strong> ${escapeHtml(feature.backend_branch)}</div>
+            <div><strong>Frontend branch:</strong> ${escapeHtml(feature.frontend_branch)}</div>
+            <div><strong>Run status:</strong> ${escapeHtml(feature.run_status || 'not started')}</div>
+            <div><strong>Updated:</strong> ${escapeHtml(feature.run_updated_at || 'n/a')}</div>
+          </div>
+
+          <div class="section-label">Acceptance Criteria</div>
+          <ul>${acceptance}</ul>
+
+          <div class="section-label">API Contract</div>
+          <ul>${apiContract}</ul>
+
+          <div class="section-label">Recent Stages</div>
+          <div class="stage-list">${stages}</div>
+
+          <div class="section-label">Recent Logs</div>
+          <pre class="log-tail">${recentLogs}</pre>
+        `;
+
+        const actions = document.createElement('div');
+        actions.className = 'control-row';
+        actions.style.marginTop = '18px';
+
+        const approveButton = document.createElement('button');
+        approveButton.type = 'button';
+        approveButton.textContent = feature.can_approve ? 'Approve Feature' : 'Already Approved / Active';
+        approveButton.disabled = !feature.can_approve;
+        approveButton.addEventListener('click', async () => {
+          approveButton.disabled = true;
+          setStatus(`Approving ${feature.id}...`);
+          try {
+            await apiRequest(`/api/admin/automation/features/${encodeURIComponent(feature.id)}/approve`, {
+              method: 'POST'
+            });
+            setStatus(`Approved ${feature.id}. Refreshing feature list...`);
+            await loadFeatures();
+          } catch (error) {
+            approveButton.disabled = false;
+            setStatus(error.message, true);
+          }
+        });
+
+        actions.appendChild(approveButton);
+
+        const runButton = document.createElement('button');
+        runButton.type = 'button';
+        const canRun = feature.status === 'approved' || feature.run_status === 'in_progress';
+        runButton.textContent = feature.run_status === 'in_progress' ? 'Running...' : 'Run Feature';
+        runButton.disabled = !canRun || feature.run_status === 'in_progress';
+        runButton.addEventListener('click', async () => {
+          runButton.disabled = true;
+          setStatus(`Starting automation for ${feature.id}...`);
+          try {
+            await apiRequest(`/api/admin/automation/features/${encodeURIComponent(feature.id)}/run`, {
+              method: 'POST'
+            });
+            setStatus(`Automation started for ${feature.id}. Refreshing status...`);
+            await loadFeatures();
+          } catch (error) {
+            runButton.disabled = false;
+            setStatus(error.message, true);
+          }
+        });
+
+        actions.appendChild(runButton);
+        card.appendChild(actions);
+        featuresRoot.appendChild(card);
+      }
+    }
+
+    function renderCandidates(candidates) {
+      candidatesRoot.innerHTML = '';
+      candidatesCard.hidden = activeTab !== 'features';
+      candidateCountPill.textContent = `${candidates.length} candidate${candidates.length === 1 ? '' : 's'}`;
+      candidateEmptyState.hidden = candidates.length > 0;
+
+      for (const candidate of candidates) {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const acceptance = (candidate.acceptance_criteria || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+        const apiContract = (candidate.api_contract || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+
+        card.innerHTML = `
+          <div class="card-head">
+            <div>
+              <h2>${escapeHtml(candidate.title)}</h2>
+              <p>${escapeHtml(candidate.id)}</p>
+            </div>
+            <span class="pill pill-suggested">candidate</span>
+          </div>
+          <div class="meta">
+            <div><strong>Priority:</strong> ${escapeHtml(candidate.priority)}</div>
+            <div><strong>Backend branch:</strong> ${escapeHtml(candidate.branches?.backend || '')}</div>
+            <div><strong>Frontend branch:</strong> ${escapeHtml(candidate.branches?.frontend || '')}</div>
+          </div>
+          <div class="section-label">Acceptance Criteria</div>
+          <ul>${acceptance}</ul>
+          <div class="section-label">API Contract</div>
+          <ul>${apiContract}</ul>
+        `;
+
+        const actions = document.createElement('div');
+        actions.className = 'control-row';
+        actions.style.marginTop = '18px';
+
+        const approveButton = document.createElement('button');
+        approveButton.type = 'button';
+        approveButton.textContent = 'Approve Candidate';
+        approveButton.addEventListener('click', async () => {
+          approveButton.disabled = true;
+          setStatus(`Approving ${candidate.id}...`);
+          try {
+            await apiRequest(`/api/admin/automation/features/${encodeURIComponent(candidate.id)}/approve`, {
+              method: 'POST',
+              body: JSON.stringify({
+                ...getRepoSelection(),
+                include_exploratory: includeExploratoryFeatures,
+              }),
+            });
+            setStatus(`Approved ${candidate.id}. Refreshing feature list...`);
+            await loadFeatures();
+          } catch (error) {
+            approveButton.disabled = false;
+            setStatus(error.message, true);
+          }
+        });
+
+        actions.appendChild(approveButton);
+        card.appendChild(actions);
+        candidatesRoot.appendChild(card);
+      }
+    }
+
+    function renderProjectIdeas(projectIdeas) {
+      projectIdeasRoot.innerHTML = '';
+      projectIdeasCard.hidden = activeTab !== 'projects';
+      const countLabel = projectTotalAvailable
+        ? `${projectIdeas.length} of ${projectTotalAvailable} projects`
+        : `${projectIdeas.length} project${projectIdeas.length === 1 ? '' : 's'}`;
+      projectIdeaCountPill.textContent = countLabel;
+      projectIdeasEmptyState.hidden = projectIdeas.length > 0;
+
+      for (const idea of projectIdeas) {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+      const pages = (idea.suggested_pages || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+      const projectFeatures = (idea.project_features || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+
+        card.innerHTML = `
+          <div class="card-head">
+            <div>
+              <h2>${escapeHtml(idea.title)}</h2>
+              <p>${escapeHtml(idea.id)}</p>
+            </div>
+            <span class="pill pill-approved">project</span>
+          </div>
+          <div class="meta">
+            <div><strong>Priority:</strong> ${escapeHtml(idea.priority)}</div>
+            <div><strong>Summary:</strong> ${escapeHtml(idea.summary || '')}</div>
+            <div><strong>Why now:</strong> ${escapeHtml(idea.why_now || '')}</div>
+          </div>
+          <div class="section-label">Project Features</div>
+          <ul>${projectFeatures}</ul>
+          <div class="section-label">Suggested Pages</div>
+          <ul>${pages}</ul>
+        `;
+
+        const actions = document.createElement('div');
+        actions.className = 'control-row';
+        actions.style.marginTop = '18px';
+
+        const detailLink = document.createElement('a');
+        const query = new URLSearchParams();
+        query.set('key', getToken());
+        if (includeExploratoryProjects) {
+          query.set('include_project_exploratory', 'true');
+          query.set('project_search_depth', String(projectSearchDepth));
+        }
+        detailLink.href = `/api/admin/automation/projects/${encodeURIComponent(idea.id)}/dashboard?${query.toString()}`;
+        detailLink.textContent = 'View Project Details';
+        detailLink.style.display = 'inline-flex';
+        detailLink.style.alignItems = 'center';
+        detailLink.style.padding = '12px 16px';
+        detailLink.style.borderRadius = '999px';
+        detailLink.style.background = 'var(--text)';
+        detailLink.style.color = '#fff';
+        detailLink.style.textDecoration = 'none';
+
+        actions.appendChild(detailLink);
+        card.appendChild(actions);
+
+        projectIdeasRoot.appendChild(card);
+      }
+
+      suggestMoreProjectsButton.disabled = false;
+      suggestMoreProjectsButton.textContent = 'Suggest More Projects';
+    }
+
+    function renderProjectLoadingCards(count = 2) {
+      projectIdeasRoot.innerHTML = '';
+      projectIdeasCard.hidden = activeTab !== 'projects';
+      projectIdeasEmptyState.hidden = true;
+      projectIdeaCountPill.textContent = 'processing';
+      for (let index = 0; index < count; index += 1) {
+        const card = document.createElement('article');
+        card.className = 'card loading-card';
+        card.innerHTML = `
+          <div class="loading-block" style="width: 62%"></div>
+          <div class="loading-block" style="width: 34%"></div>
+          <div class="loading-block" style="width: 100%; margin-top: 24px;"></div>
+          <div class="loading-block" style="width: 92%"></div>
+          <div class="loading-block" style="width: 88%"></div>
+          <div class="progress"><div class="progress-bar"></div></div>
+        `;
+        projectIdeasRoot.appendChild(card);
+      }
+    }
+
+    function renderList(root, items) {
+      root.innerHTML = (items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+    }
+
+    function renderContext(context) {
+      if (!context) {
+        contextCard.hidden = true;
+        return;
+      }
+
+      contextCard.hidden = false;
+      contextProjectName.textContent = context.project_name || 'Project context';
+      templateCountPill.textContent = `${(context.feature_templates || []).length} templates`;
+      contextSummary.innerHTML = `
+        <div><strong>Summary:</strong> ${escapeHtml(context.project_summary || 'No summary configured.')}</div>
+      `;
+      renderList(contextGoals, context.discovery_goals || []);
+      renderList(contextBackend, context.backend_context || []);
+      renderList(contextFrontend, context.frontend_context || []);
+    }
+
+    async function apiRequest(path, options = {}) {
+      const token = getToken();
+      if (!token) {
+        throw new Error('CODING_DASHBOARD key is required.');
+      }
+
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          'X-Coding-Dashboard-Key': token,
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Request failed with status ${response.status}`);
+      }
+      return data;
+    }
+
+    async function loadFeatures(options = {}) {
+      if (!options.silent) {
+        setStatus('Loading automation features...');
+      }
+      const repoSelection = getRepoSelection();
+      const query = new URLSearchParams();
+      if (repoSelection.backend_repo) query.set('backend_repo', repoSelection.backend_repo);
+      if (repoSelection.frontend_repo) query.set('frontend_repo', repoSelection.frontend_repo);
+      if (includeExploratoryFeatures) query.set('include_exploratory', 'true');
+      if (featureCategorySelect.value) query.set('feature_category', featureCategorySelect.value);
+      if (includeExploratoryProjects) query.set('include_project_exploratory', 'true');
+      query.set('project_limit', String(projectLimit));
+      query.set('project_search_depth', String(projectSearchDepth));
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const [contextPayload, featuresPayload] = await Promise.all([
+        apiRequest('/api/admin/automation/context'),
+        apiRequest(`/api/admin/automation/features${suffix}`)
+      ]);
+      if (featuresPayload.project) {
+        backendRepoInput.value = featuresPayload.project.backend_repo || backendRepoInput.value;
+        frontendRepoInput.value = featuresPayload.project.frontend_repo || frontendRepoInput.value;
+        includeExploratoryFeatures = Boolean(featuresPayload.project.include_exploratory);
+        featureCategorySelect.value = featuresPayload.project.feature_category || featureCategorySelect.value;
+        includeExploratoryProjects = Boolean(featuresPayload.project.include_project_exploratory);
+        projectLimit = Number(featuresPayload.project.project_limit || projectLimit || 3);
+        projectSearchDepth = Number(featuresPayload.project.project_search_depth || projectSearchDepth || 1);
+        projectTotalAvailable = Number(featuresPayload.project.project_total_available || 0);
+      }
+      renderContext(contextPayload.context);
+      renderFeatures(featuresPayload.features || []);
+      renderFeatureCategories(featuresPayload.candidate_categories || []);
+      renderCandidates(featuresPayload.candidates || []);
+      renderProjectIdeas(featuresPayload.project_candidates || []);
+      syncAutoRefresh(featuresPayload.features || []);
+      if (!options.silent) {
+        setStatus(`Loaded ${featuresPayload.features.length} tracked feature(s), ${featuresPayload.candidates.length} feature candidate(s), and ${featuresPayload.project_candidates.length} project suggestion(s).`);
+      }
+      setActiveTab(activeTab);
+    }
+
+    saveTokenButton.addEventListener('click', () => {
+      localStorage.setItem(STORAGE_KEY, getToken());
+      localStorage.setItem(BACKEND_REPO_KEY, backendRepoInput.value.trim());
+      localStorage.setItem(FRONTEND_REPO_KEY, frontendRepoInput.value.trim());
+      localStorage.setItem(FEATURE_CATEGORY_KEY, featureCategorySelect.value);
+      localStorage.setItem(FEATURE_EXPLORATORY_KEY, String(includeExploratoryFeatures));
+      localStorage.setItem(PROJECT_EXPLORATORY_KEY, String(includeExploratoryProjects));
+      localStorage.setItem(PROJECT_LIMIT_KEY, String(projectLimit));
+      localStorage.setItem(PROJECT_SEARCH_DEPTH_KEY, String(projectSearchDepth));
+      setStatus('Dashboard key saved locally in this browser.');
+    });
+
+    refreshButton.addEventListener('click', async () => {
+      try {
+        await loadFeatures();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    featureCategorySelect.addEventListener('change', async () => {
+      try {
+        localStorage.setItem(FEATURE_CATEGORY_KEY, featureCategorySelect.value);
+        setActiveTab('features');
+        setStatus(`Filtering project features by ${featureCategorySelect.options[featureCategorySelect.selectedIndex].text}...`);
+        await loadFeatures();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    featuresTabButton.addEventListener('click', () => setActiveTab('features'));
+    projectsTabButton.addEventListener('click', () => setActiveTab('projects'));
+
+    suggestMoreFeaturesButton.addEventListener('click', async () => {
+      try {
+        includeExploratoryFeatures = true;
+        localStorage.setItem(BACKEND_REPO_KEY, backendRepoInput.value.trim());
+        localStorage.setItem(FRONTEND_REPO_KEY, frontendRepoInput.value.trim());
+        localStorage.setItem(FEATURE_EXPLORATORY_KEY, 'true');
+        setActiveTab('features');
+        setStatus('Refreshing feature candidates for the selected project...');
+        await loadFeatures();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    suggestMoreProjectsButton.addEventListener('click', async () => {
+      try {
+        localStorage.setItem(BACKEND_REPO_KEY, backendRepoInput.value.trim());
+        localStorage.setItem(FRONTEND_REPO_KEY, frontendRepoInput.value.trim());
+        includeExploratoryProjects = true;
+        projectSearchDepth += 1;
+        projectLimit += 3;
+        localStorage.setItem(PROJECT_EXPLORATORY_KEY, 'true');
+        localStorage.setItem(PROJECT_LIMIT_KEY, String(projectLimit));
+        localStorage.setItem(PROJECT_SEARCH_DEPTH_KEY, String(projectSearchDepth));
+        setActiveTab('projects');
+        renderProjectLoadingCards(3);
+        setStatus(`Searching wider for project ideas at depth ${projectSearchDepth}...`);
+        await loadFeatures();
+        projectIdeasCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    setActiveTab(activeTab);
+  </script>
+</body>
+</html>

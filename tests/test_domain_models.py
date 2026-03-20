@@ -3,6 +3,7 @@ from datetime import datetime
 
 from app.auth import models as auth_models
 from app.lead_gen.jobs import model as jobs_model
+from app.lead_gen.leads import model as leads_model
 from app.lead_gen.saved_searches import model as saved_searches_model
 
 
@@ -69,6 +70,58 @@ class DomainModelTestCase(unittest.TestCase):
         self.assertEqual(doc["keyword"], "Plumbers")
         self.assertEqual(doc["location"], "Mumbai")
         self.assertEqual(doc["limit"], 10)
+
+    def test_lead_to_response_adds_normalized_website_actions(self):
+        doc = {
+            "_id": "lead-1",
+            "name": "ACME Plumbing",
+            "phone": "1234567890",
+            "email": "hello@example.com",
+            "website": "example.com",
+            "address": "Mumbai",
+            "source": "google_maps",
+        }
+
+        response = leads_model.to_response(doc)
+
+        self.assertEqual(response["website"], "example.com")
+        self.assertEqual(response["website_url"], "https://example.com")
+        self.assertEqual(response["website_domain"], "example.com")
+        self.assertEqual(
+            response["website_actions"],
+            {
+                "can_open": True,
+                "can_preview": True,
+                "open_url": "https://example.com",
+                "preview_url": "https://example.com",
+            },
+        )
+
+    def test_lead_to_response_handles_missing_website_actions(self):
+        doc = {
+            "_id": "lead-2",
+            "name": "No Site Lead",
+            "phone": None,
+            "email": None,
+            "website": "  ",
+            "address": None,
+            "source": "google_maps",
+        }
+
+        response = leads_model.to_response(doc)
+
+        self.assertEqual(response["website"], "  ")
+        self.assertIsNone(response["website_url"])
+        self.assertIsNone(response["website_domain"])
+        self.assertEqual(
+            response["website_actions"],
+            {
+                "can_open": False,
+                "can_preview": False,
+                "open_url": None,
+                "preview_url": None,
+            },
+        )
 
 
 if __name__ == "__main__":
