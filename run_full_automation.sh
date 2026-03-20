@@ -39,7 +39,6 @@ export AUTOMATION_WEBHOOK_URL
 
 exec "$PYTHON_BIN" -m automation.orchestrator \
   --discover \
-  --auto-approve \
   --force-prs \
   --max-retries "$MAX_RETRIES" \
   --execute-branches \

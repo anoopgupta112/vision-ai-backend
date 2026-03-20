@@ -1,8 +1,9 @@
 name: Automation Orchestrator
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  # Re-enable later if you want automatic interval runs again.
+  # schedule:
+  #   - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
