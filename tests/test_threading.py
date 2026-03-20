@@ -29,8 +29,8 @@ class TestThreading(unittest.TestCase):
         if ROOT_DIR not in sys.path:
             sys.path.insert(0, ROOT_DIR)
 
-        from app.lead_gen.jobs.scraping.concurrency import LeadProcessor
-        from app.lead_gen.jobs.scraping.maps import MapsScraper
+        from app.projects.lead_gen.jobs.scraping.concurrency import LeadProcessor
+        from app.projects.lead_gen.jobs.scraping.maps import MapsScraper
 
         mock_job = {
             "_id": "dummy_id",

@@ -6,11 +6,11 @@ import sys
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from app.core.middleware import auth_required, admin_required, get_current_user
 from app.core.database import get_collection
-from app.core.exceptions import AppException, NotFoundError, ValidationError
+from app.core.exceptions import AppException
 from app.auth import models as auth_models
-from app.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
-from app.lead_gen.jobs import model as jobs_model, pipeline as jobs_pipeline
-from app.lead_gen import credit_requests
+from app.projects.lead_gen import credit_requests
+from app.projects.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
+from app.projects.lead_gen.jobs import model as jobs_model, pipeline as jobs_pipeline
 from automation.discovery import discover_features, discover_project_templates, load_discovery_skill
 from automation.feature_store import find_feature_by_id, load_feature_manifests, save_feature_manifest, update_feature_manifest_status
 from automation.log_store import feature_log_path, read_log_tail
@@ -137,8 +137,8 @@ def adjust_credits(user_id):
 @admin_required
 def get_stats():
     total_users = auth_models.count_users()
-    total_jobs = get_collection('jobs').count_documents({})
-    total_leads = get_collection('leads').count_documents({})
+    total_jobs = get_collection('lead_jobs').count_documents({})
+    total_leads = get_collection('lead_leads').count_documents({})
     
     return jsonify({
         'stats': {
@@ -156,7 +156,7 @@ def list_all_jobs():
     limit = request.args.get('limit', 100, type=int)
     skip = request.args.get('skip', 0, type=int)
     
-    jobs_coll = get_collection('jobs')
+    jobs_coll = get_collection('lead_jobs')
     users_coll = get_collection('users')
     
     # Get jobs with pagination

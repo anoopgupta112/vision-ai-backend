@@ -2,9 +2,9 @@ import unittest
 from datetime import datetime
 
 from app.auth import models as auth_models
-from app.lead_gen.jobs import model as jobs_model
-from app.lead_gen.leads import model as leads_model
-from app.lead_gen.saved_searches import model as saved_searches_model
+from app.projects.lead_gen.jobs import model as jobs_model
+from app.projects.lead_gen.leads import model as leads_model
+from app.projects.lead_gen.saved_searches import model as saved_searches_model
 
 
 class DomainModelTestCase(unittest.TestCase):

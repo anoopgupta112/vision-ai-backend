@@ -166,7 +166,7 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
 class SavedSearchModelTestCase(unittest.TestCase):
     def test_delete_saved_search_raises_when_nothing_was_removed(self):
         from app.core.exceptions import NotFoundError
-        from app.lead_gen.saved_searches import pipeline
+        from app.projects.lead_gen.saved_searches import pipeline
 
         mock_result = MagicMock()
         mock_result.deleted_count = 0
