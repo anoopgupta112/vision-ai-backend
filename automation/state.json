@@ -1,0 +1,64 @@
+{
+  "features": {
+    "lead-website-actions": {
+      "stages": [
+        {
+          "detail": "Selected explicit feature: lead-website-actions",
+          "name": "feature_selection",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.283711+00:00"
+        },
+        {
+          "detail": "Preflight checks passed.",
+          "name": "preflight",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.284161+00:00"
+        },
+        {
+          "detail": "Validated feature manifest: lead-website-actions",
+          "name": "spec_validation",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.284632+00:00"
+        },
+        {
+          "detail": "Backend and frontend branches are prepared.",
+          "name": "branch_preparation",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.285204+00:00"
+        },
+        {
+          "detail": "Codex execution completed.",
+          "name": "backend_codex_attempt_1",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.285884+00:00"
+        },
+        {
+          "detail": "Codex execution completed.",
+          "name": "frontend_codex_attempt_1",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.286666+00:00"
+        },
+        {
+          "detail": "Backend and frontend validation commands completed successfully.",
+          "name": "validation_attempt_1",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.287538+00:00"
+        },
+        {
+          "detail": "backend pushed agent/lead-website-actions-backend: branch 'agent/lead-website-actions-backend' set up to track 'origin/agent/lead-website-actions-backend'. | frontend pushed agent/lead-website-actions-frontend: branch 'agent/lead-website-actions-frontend' set up to track 'origin/agent/lead-website-actions-frontend'.",
+          "name": "branch_push",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.288931+00:00"
+        },
+        {
+          "detail": "Backend and frontend pull requests created and cross-linked. backend=https://github.com/anoopgupta112/vision-ai-backend/pull/11 frontend=https://github.com/anoopgupta112/vision-ai-frontend/pull/9",
+          "name": "pull_requests",
+          "status": "done",
+          "updated_at": "2026-03-20T18:36:02.289986+00:00"
+        }
+      ],
+      "status": "in_progress",
+      "updated_at": "2026-03-20T18:36:02.289988+00:00"
+    }
+  }
+}

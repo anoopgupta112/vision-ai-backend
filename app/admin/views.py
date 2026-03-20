@@ -282,6 +282,7 @@ def run_automation_feature(feature_id):
 
     command = [
         sys.executable,
+        '-u',
         '-m',
         'automation.orchestrator',
         '--feature-id',
@@ -292,13 +293,15 @@ def run_automation_feature(feature_id):
         '--execute-pushes',
         '--execute-prs',
     ]
+    log_handle = feature_log_path(feature_id).open('w', buffering=1)
     process = subprocess.Popen(
         command,
         cwd=str(Path(current_app.root_path).parent),
-        stdout=feature_log_path(feature_id).open('w'),
+        stdout=log_handle,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    log_handle.close()
     mark_feature_in_progress(feature_id)
     append_stage_result(feature_id, 'run_requested', 'done', f'Automation triggered from dashboard. pid={process.pid}')
     return jsonify({

@@ -157,6 +157,31 @@ class OrchestratorTests(unittest.TestCase):
         find_feature_by_id.assert_called_once()
         pick_next_approved_feature.assert_not_called()
 
+    def test_appends_stage_results_while_running(self) -> None:
+        feature = self._feature()
+        args = self._args(execute_prs=False)
+
+        with patch("automation.orchestrator.parse_args", return_value=args), \
+            patch("automation.orchestrator.load_feature_manifests", return_value=[feature]), \
+            patch("automation.orchestrator.pick_next_approved_feature", return_value=feature), \
+            patch("automation.orchestrator.validate_feature_manifest", return_value=[]), \
+            patch("automation.orchestrator.run_preflight", return_value=StageResult("preflight", "done", "ok")), \
+            patch("automation.orchestrator.mark_feature_in_progress"), \
+            patch("automation.orchestrator.set_feature_status") as set_feature_status, \
+            patch("automation.orchestrator.append_stage_result") as append_stage_result, \
+            patch("automation.orchestrator.update_feature_manifest_status"), \
+            patch("automation.orchestrator.execute_branch_preparation", return_value=StageResult("branch_preparation", "done", "ok")), \
+            patch("automation.orchestrator.execute_backend_codex_run", return_value=StageResult("backend_codex", "done", "ok")), \
+            patch("automation.orchestrator.execute_frontend_codex_run", return_value=StageResult("frontend_codex", "done", "ok")), \
+            patch("automation.orchestrator.execute_validation_run", return_value=StageResult("validation", "done", "ok")), \
+            patch("automation.orchestrator.plan_branch_push", return_value=StageResult("branch_push", "pending", "planned")), \
+            patch("automation.orchestrator.plan_pull_requests", return_value=StageResult("pull_requests", "pending", "planned")):
+            exit_code = orchestrator.main()
+
+        self.assertEqual(0, exit_code)
+        self.assertGreaterEqual(append_stage_result.call_count, 5)
+        set_feature_status.assert_called()
+
     def _args(self, auto_approve: bool = False, execute_prs: bool = True, force_prs: bool = False) -> Namespace:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)

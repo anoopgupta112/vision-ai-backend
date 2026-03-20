@@ -458,10 +458,27 @@
     let projectSearchDepth = Number(localStorage.getItem(PROJECT_SEARCH_DEPTH_KEY) || '1');
     let projectTotalAvailable = 0;
     let activeTab = localStorage.getItem(TAB_KEY) || 'features';
+    let autoRefreshHandle = null;
 
     function setStatus(message, isError = false) {
       statusLine.textContent = message;
       statusLine.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+    }
+
+    function syncAutoRefresh(features) {
+      const hasInProgress = (features || []).some((feature) => feature.run_status === 'in_progress');
+      if (hasInProgress && !autoRefreshHandle) {
+        autoRefreshHandle = window.setInterval(async () => {
+          try {
+            await loadFeatures({ silent: true });
+          } catch (_) {
+          }
+        }, 4000);
+      }
+      if (!hasInProgress && autoRefreshHandle) {
+        window.clearInterval(autoRefreshHandle);
+        autoRefreshHandle = null;
+      }
     }
 
     function getToken() {
@@ -808,8 +825,10 @@
       return data;
     }
 
-    async function loadFeatures() {
-      setStatus('Loading automation features...');
+    async function loadFeatures(options = {}) {
+      if (!options.silent) {
+        setStatus('Loading automation features...');
+      }
       const repoSelection = getRepoSelection();
       const query = new URLSearchParams();
       if (repoSelection.backend_repo) query.set('backend_repo', repoSelection.backend_repo);
@@ -839,7 +858,10 @@
       renderFeatureCategories(featuresPayload.candidate_categories || []);
       renderCandidates(featuresPayload.candidates || []);
       renderProjectIdeas(featuresPayload.project_candidates || []);
-      setStatus(`Loaded ${featuresPayload.features.length} tracked feature(s), ${featuresPayload.candidates.length} feature candidate(s), and ${featuresPayload.project_candidates.length} project suggestion(s).`);
+      syncAutoRefresh(featuresPayload.features || []);
+      if (!options.silent) {
+        setStatus(`Loaded ${featuresPayload.features.length} tracked feature(s), ${featuresPayload.candidates.length} feature candidate(s), and ${featuresPayload.project_candidates.length} project suggestion(s).`);
+      }
       setActiveTab(activeTab);
     }
 

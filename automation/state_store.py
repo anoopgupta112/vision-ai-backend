@@ -28,6 +28,16 @@ def mark_feature_in_progress(feature_id: str, state_file: Path = STATE_FILE) -> 
     return state
 
 
+def set_feature_status(feature_id: str, status: str, state_file: Path = STATE_FILE) -> Dict[str, Any]:
+    state = load_state(state_file)
+    features = state.setdefault("features", {})
+    record = features.setdefault(feature_id, {})
+    record["status"] = status
+    record["updated_at"] = _utc_now()
+    save_state(state, state_file)
+    return state
+
+
 def append_stage_result(feature_id: str, stage_name: str, status: str, detail: str, state_file: Path = STATE_FILE) -> Dict[str, Any]:
     state = load_state(state_file)
     features = state.setdefault("features", {})
