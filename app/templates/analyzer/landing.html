@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DataExtractor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b1220;--muted:#94a3b8}
+    *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1f2a48 0%,transparent 60%),radial-gradient(1000px 600px at 110% 10%,#0ea5e9 0%,transparent 50%),linear-gradient(180deg,#0b1220 0%,#0b1220 100%);color:#e2e8f0}
+    a{text-decoration:none;color:inherit}
+    .nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(160%) blur(10px);background:linear-gradient(180deg,rgba(2,6,23,.8),rgba(2,6,23,.45));border-bottom:1px solid #0f233b}
+    .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:18px;padding:16px 20px}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800}
+    .logo-badge{width:34px;height:34px;border-radius:9px;background:conic-gradient(from 140deg,#6366f1,#22d3ee,#38bdf8,#6366f1)}
+    .nav-links{margin-left:auto;display:flex;gap:14px}
+    .nav-link{padding:10px 12px;border-radius:10px;color:#cbd5e1;border:1px solid transparent}
+    .nav-link:hover{border-color:#1f365b;background:#0b1b34}
+    .hero{max-width:1200px;margin:42px auto;padding:0 20px;display:grid;grid-template-columns:1.1fr .9fr;gap:28px}
+    .headline{font-size:44px;line-height:1.05;margin:8px 0 14px;font-weight:800}
+    .sub{color:var(--muted);font-size:18px;max-width:720px}
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px}
+    .card{background:linear-gradient(180deg,rgba(148,163,184,.06),rgba(148,163,184,.03));border:1px solid #1f2a3a;border-radius:18px;padding:26px}
+    .go{margin-top:18px;display:inline-flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid #20314d;background:#0e1a2e;color:#e5edff}
+    .art{background:radial-gradient(600px 280px at 80% -10%,rgba(99,102,241,.5),transparent 60%),linear-gradient(180deg,rgba(14,23,40,.7),rgba(14,23,40,.4));border:1px solid #1e2d49;border-radius:22px;padding:26px;min-height:320px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+    .panel{width:88%;max-width:560px;border-radius:16px;border:1px solid #22324e;background:linear-gradient(180deg,#0c172a,#0b1220);padding:18px}
+    .panel-row{display:flex;gap:10px}
+    .pill{flex:1;padding:12px;border-radius:12px;background:#0f1e36;border:1px solid #213456}
+    @media (max-width:1000px){.hero{grid-template-columns:1fr}.cards{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <div class="logo"><span class="logo-badge"></span>DataExtractor</div>
+      <div class="nav-links">
+        <a class="nav-link" href="/api/analyzer">Home</a>
+        <a class="nav-link" href="/api/analyzer/match_upload">Resume Matcher</a>
+        <a class="nav-link" href="/api/analyzer/form-builder">Form Builder</a>
+        <a class="nav-link" href="/api/analyzer/match_results">Results</a>
+      </div>
+    </div>
+  </div>
+  <section class="hero">
+    <div>
+      <div class="headline">Fast resume matching and custom forms.</div>
+      <div class="sub">Upload resumes and a JD to get explainable matches, or generate a custom form and analyze submitted PDFs later in the same workspace.</div>
+      <div class="cards">
+        <div class="card">
+          <h3>Match Resume with Folder</h3>
+          <p>Find top candidates with transparent scoring and GitHub insights.</p>
+          <a class="go" href="/api/analyzer/match_upload">Open Resume Matcher</a>
+        </div>
+        <div class="card">
+          <h3>Create Form</h3>
+          <p>Spin up an API-backed form, then analyze submissions as a batch.</p>
+          <a class="go" href="/api/analyzer/form-builder">Open Form Builder</a>
+        </div>
+      </div>
+    </div>
+    <div class="art">
+      <div class="panel">
+        <div class="panel-row">
+          <div class="pill"><b>Speed</b><div>Batch analyze PDFs in one click.</div></div>
+          <div class="pill"><b>Clarity</b><div>Positive and negative evidence.</div></div>
+        </div>
+        <div class="panel-row" style="margin-top:10px">
+          <div class="pill"><b>Dev Signals</b><div>Pull GitHub repos and questions.</div></div>
+          <div class="pill"><b>APIs</b><div>Auto cURL and endpoints.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

@@ -19,7 +19,7 @@ class Config:
     OPENROUTER_HTTP_REFERER = os.environ.get('OPENROUTER_HTTP_REFERER', 'http://localhost')
     OPENROUTER_TITLE = os.environ.get('OPENROUTER_TITLE', 'Main Dashboard')
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-    GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash-exp')
+    GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
     ANALYZER_UPLOAD_DIR = os.environ.get('ANALYZER_UPLOAD_DIR', 'uploads/analyzer')
     DEBUG = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'

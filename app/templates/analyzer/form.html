@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dynamic User Form</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--muted:#9fb0c5;--line:#1e2d49;--acc:#6366f1;--acc2:#22d3ee}
+    *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:#e2e8f0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .navbar{background:linear-gradient(180deg,rgba(2,6,23,.85),rgba(2,6,23,.5));border-bottom:1px solid #11213a;padding:14px 28px;font-weight:bold;font-size:1.2rem;display:flex;justify-content:space-between;align-items:center}
+    .navbar a{color:var(--muted);text-decoration:none;margin-left:16px;border-radius:8px;padding:6px 10px}
+    .navbar a:hover{background:#0c1e37;border:1px solid #2a3f63}
+    .form-wrapper{max-width:520px;margin:40px auto;background:var(--panel);border-radius:16px;border:1px solid var(--line);padding:40px 36px 32px}
+    .form-title{text-align:center;color:var(--acc);font-size:2rem;font-weight:bold;margin-bottom:24px}
+    label{display:block;font-weight:600;margin-top:14px;margin-bottom:6px;color:var(--muted)}
+    input{width:100%;padding:12px;border-radius:8px;border:1px solid #213456;background:#0b172c;color:#e5edff}
+    button{width:100%;margin-top:20px;padding:12px;border:1px solid #213456;border-radius:8px;font-weight:bold;background:#0f2039;color:#cfe4ff;cursor:pointer}
+    .download-link{display:inline-block;margin-top:18px;background:linear-gradient(90deg,#10b981,#22d3ee);padding:10px 16px;border-radius:6px;font-weight:bold;text-decoration:none;color:#00131f}
+    .success-message{background:linear-gradient(90deg,var(--acc2),var(--acc));color:white;padding:12px 18px;border-radius:7px;margin-top:18px;text-align:center;font-weight:500;display:none}
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <div>Dynamic User Form</div>
+    <div>
+      <a href="/api/analyzer">Home</a>
+      <a href="/api/analyzer/form-builder">Form Builder</a>
+      <a href="/api/analyzer/match_results">Results</a>
+    </div>
+  </div>
+  <div class="form-wrapper">
+    <div class="form-title">Fill the Form</div>
+    <form method="post" id="userForm" enctype="multipart/form-data">
+      {% for field in fields %}
+        <div>
+          <label>{{ field.label }}:</label>
+          {% if field.data_type == 'file' %}
+            <input type="file" name="{{ field.name }}" {% if field.accept %}accept=".{{ field.accept | join(',.') }}"{% endif %} required>
+          {% else %}
+            <input type="{{ field.data_type }}" name="{{ field.name }}" required>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <button type="submit">Submit</button>
+    </form>
+    <a class="download-link" href="/api/analyzer/v1/data/{{ form_id }}/excel">Download Excel</a>
+    <button id="analyzeAllBtn" style="display:none;">Analyze All PDFs</button>
+    <div id="successMsg" class="success-message">Form submitted successfully!</div>
+  </div>
+  <script>
+    document.getElementById('userForm').onsubmit = async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      const response = await fetch(`/api/analyzer/v1/data/{{ form_id }}`, { method: 'POST', body: formData });
+      if (response.ok) {
+        form.reset();
+        document.getElementById('successMsg').style.display = 'block';
+        setTimeout(() => { document.getElementById('successMsg').style.display = 'none'; }, 2500);
+        document.getElementById('analyzeAllBtn').style.display = 'block';
+      }
+    }
+    document.getElementById('analyzeAllBtn').onclick = function() {
+      window.location.href = `/api/analyzer/analyze_pdfs/{{ form_id }}`;
+    }
+  </script>
+</body>
+</html>
