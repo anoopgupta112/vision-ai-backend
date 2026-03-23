@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Resume Match Results</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--muted:#9fb0c5;--line:#1e2d49;--acc:#6366f1;--acc2:#22d3ee}
+    *{box-sizing:border-box} html,body{margin:0;background:#0b1220;color:#e2e8f0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .nav{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,rgba(2,6,23,.85),rgba(2,6,23,.5));border-bottom:1px solid #11213a}
+    .nav-inner{max-width:1150px;margin:0 auto;display:flex;align-items:center;padding:14px 20px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
+    .dot{width:26px;height:26px;border-radius:8px;background:conic-gradient(from 140deg,#6366f1,#22d3ee,#38bdf8,#6366f1)}
+    .links{margin-left:auto;display:flex;gap:12px}
+    .link{padding:8px 12px;border-radius:10px;color:#cbd5e1;border:1px solid transparent;text-decoration:none}
+    .link:hover{border-color:#2a3f63;background:#0c1e37}
+    .wrap{max-width:1150px;margin:28px auto;padding:0 20px}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+    .controls input{padding:10px 12px;border-radius:10px;border:1px solid #213456;background:#0b172c;color:#e5edff}
+    .btn{padding:10px 12px;border-radius:10px;border:1px solid #213456;background:#0f2039;color:#cfe4ff;font-weight:700;cursor:pointer}
+    .result-card{background:linear-gradient(180deg,rgba(148,163,184,.06),rgba(148,163,184,.03));border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+    .summary{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 12px}
+    .summary-item{padding:8px 10px;border-radius:10px;border:1px solid #24395d;background:#0b1526;color:#d8e6fb;font-size:13px}
+    .content{display:none;padding:10px 12px;background:#0b1526;border-radius:10px;margin-top:6px}
+    .content.open{display:block}
+    .collapsible{width:100%;text-align:left;margin-top:10px;padding:12px 14px;border:none;border-radius:10px;background:#0e1a2d;border:1px solid #223a61;color:#cfe4ff;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .collapsible:hover,.collapsible.active{background:#102340;border-color:#3b5f96}
+    .collapsible-label{display:flex;align-items:center;gap:10px}
+    .collapsible-meta{font-size:12px;color:#9fb0c5;font-weight:600}
+    .chevron{font-size:12px;color:#8ec5ff;transition:transform .15s ease}
+    .collapsible.active .chevron{transform:rotate(180deg)}
+    .empty-state{color:#9fb0c5;font-style:italic}
+    .finding-list{margin:0;padding-left:18px}
+    .finding-item{margin:0 0 10px}
+    .keyword-list{margin-top:4px;font-size:12px;color:#8ec5ff}
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <div class="brand"><span class="dot"></span>Match Results</div>
+      <div class="links">
+        <a class="link" href="/api/analyzer">Home</a>
+        <a class="link" href="/api/analyzer/match_upload">Matcher</a>
+        <a class="link" href="/api/analyzer/form-builder">Form Builder</a>
+        <a class="link" href="/api/analyzer/github_questions">GitHub Q&A</a>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <h1>Resume Match Results</h1>
+    <div class="controls">
+      <label>Filter by Match %:</label>
+      <input type="number" id="minMatch" placeholder="Min %" />
+      <input type="number" id="maxMatch" placeholder="Max %" />
+      <button class="btn" onclick="applyFilter()">Apply Filter</button>
+    </div>
+    <div id="githubLinksSection" style="margin-bottom:18px;background:#0b1527;border:1px solid #1b2b48;padding:16px;border-radius:12px">
+      <b>All GitHub Repository Links Found:</b>
+      <div id="allGithubLinks" style="margin-top:8px;"></div>
+    </div>
+    <div class="controls" style="margin-bottom:22px">
+      <button class="btn" onclick="showAllGithubQuestions()">Show All GitHub Questions</button>
+      <button class="btn" onclick="downloadAllCSVs()">Download All CSVs</button>
+    </div>
+    <div id="results"></div>
+  </div>
+  <script>
+    let matches = (JSON.parse(localStorage.getItem('matchResults') || '{}').matches) || [];
+    function escapeHtml(value) {
+      return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll(\"'\",'&#39;');
+    }
+    function findingCount(value) {
+      return Array.isArray(value) ? value.length : (value ? 1 : 0);
+    }
+    function sectionButton(label, metaText = '', open = false) {
+      return `
+        <button class="collapsible${open ? ' active' : ''}" ${open ? 'data-open="true"' : ''}>
+          <span class="collapsible-label">${escapeHtml(label)}</span>
+          <span style="display:flex;align-items:center;gap:12px">
+            ${metaText ? `<span class="collapsible-meta">${escapeHtml(metaText)}</span>` : ''}
+            <span class="chevron">▼</span>
+          </span>
+        </button>
+      `;
+    }
+    function renderNested(value) {
+      if (Array.isArray(value)) {
+        if (!value.length) return '<div class="empty-state">No items returned.</div>';
+        return '<ul class="finding-list">' + value.map(item => {
+          if (typeof item === 'string') return `<li class="finding-item">${escapeHtml(item)}</li>`;
+          if (typeof item === 'object' && item) {
+            const description = item.description ? `<div><strong>${escapeHtml(item.description)}</strong></div>` : '';
+            const keywords = Array.isArray(item.keywords) && item.keywords.length
+              ? `<div class="keyword-list">${item.keywords.map(keyword => escapeHtml(keyword)).join(' • ')}</div>`
+              : '';
+            const extra = Object.entries(item)
+              .filter(([k]) => k !== 'description' && k !== 'keywords')
+              .map(([k, v]) => `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(Array.isArray(v) ? v.join(', ') : v)}</div>`)
+              .join('');
+            return `<li class="finding-item">${description}${keywords}${extra}</li>`;
+          }
+          return `<li class="finding-item">${escapeHtml(item)}</li>`;
+        }).join('') + '</ul>';
+      }
+      return `<div>${escapeHtml(value || '')}</div>`;
+    }
+    function render(results) {
+      const root = document.getElementById('results');
+      root.innerHTML = '';
+      results.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        const report = item.match_report || {};
+        let projectHtml = '';
+        let experienceHtml = '';
+        let jdHtml = '';
+        (item.github_questions || item.question_sets || []).forEach((set) => {
+          let title = set.repo || 'Unknown Source';
+          if (set.source === 'experience') title = 'Experience';
+          if (set.source === 'project') title = `Project: ${set.repo}`;
+          if (set.source === 'github') title = `GitHub: ${set.repo}`;
+          if (set.source === 'jd') title = 'Job Description';
+          const html = `
+            ${sectionButton(title, `${(set.questions || []).length} question(s)`)}
+            <div class="content">
+              ${set.summary ? `${sectionButton('Summary', 'Overview')}<div class="content"><div style="margin:6px 0 10px 0;">${escapeHtml(set.summary)}</div></div>` : ''}
+              ${(set.questions || []).length ? `${sectionButton('Questions', `${(set.questions || []).length} items`)}<div class="content"><ul style="margin:8px 0 0 0;padding-left:18px;">${set.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ul></div>` : ''}
+            </div>
+          `;
+          if (set.source === 'experience') experienceHtml += html;
+          else if (set.source === 'jd') jdHtml += html;
+          else projectHtml += html;
+        });
+        const positiveCount = findingCount(report.positive);
+        const negativeCount = findingCount(report.negative);
+        card.innerHTML = `
+          <div style="font-size:13px;color:#9fb0c5;margin-bottom:4px">Resume ID: <b>${escapeHtml(item.file_name || item.pdf_path || 'Resume')}</b></div>
+          <h3>${escapeHtml(item.file_name || item.pdf_path || 'Resume')} <span style="display:inline-block;margin-left:8px;padding:4px 8px;border-radius:999px;background:linear-gradient(90deg,#10b981,#22d3ee);color:#021523;font-weight:900;font-size:12px">${escapeHtml(report.percent_match || 0)}% Match</span></h3>
+          <p>${escapeHtml(report.description || '')}</p>
+          <div class="summary">
+            <div class="summary-item">Positive Signals: <strong>${positiveCount}</strong></div>
+            <div class="summary-item">Negative Signals: <strong>${negativeCount}</strong></div>
+            <div class="summary-item">Question Sets: <strong>${(item.github_questions || item.question_sets || []).length}</strong></div>
+          </div>
+          ${sectionButton('Positive Signals', `${positiveCount} item(s)`, true)}
+          <div class="content open">${renderNested(report.positive)}</div>
+          ${sectionButton('Negative Signals', `${negativeCount} item(s)`, true)}
+          <div class="content open">${renderNested(report.negative)}</div>
+          ${sectionButton('Projects And GitHub', `${projectHtml ? 'Expand to view' : 'No items'}`)}
+          <div class="content">${projectHtml || '<i>No Project/GitHub questions found.</i>'}</div>
+          ${sectionButton('Job Description Questions', `${jdHtml ? 'Expand to view' : 'No items'}`)}
+          <div class="content">${jdHtml || '<i>No Job Description questions found.</i>'}</div>
+          ${sectionButton('Experience Questions', `${experienceHtml ? 'Expand to view' : 'No items'}`)}
+          <div class="content">${experienceHtml || '<i>No Experience questions found.</i>'}</div>
+        `;
+        root.appendChild(card);
+      });
+      document.querySelectorAll('.collapsible').forEach(btn => {
+        btn.onclick = function() {
+          const next = this.nextElementSibling;
+          this.classList.toggle('active');
+          next.style.display = next.style.display === 'block' ? 'none' : 'block';
+        };
+        if (btn.dataset.open === 'true') {
+          const next = btn.nextElementSibling;
+          if (next) next.style.display = 'block';
+        }
+      });
+    }
+    function renderAllGithubLinks() {
+      const urls = [];
+      matches.forEach(item => {
+        (item.links || []).forEach(link => {
+          if (link && typeof link === 'object' && link.uri && /^https:\/\/github.com\/[^/]+\/[^/]+/.test(link.uri)) {
+            urls.push(link.uri.match(/^https:\/\/github.com\/[^/]+\/[^/]+/)[0]);
+          }
+        });
+      });
+      const uniqueUrls = Array.from(new Set(urls));
+      document.getElementById('allGithubLinks').innerHTML = uniqueUrls.length
+        ? uniqueUrls.map(url => `<a href="${escapeHtml(url)}" target="_blank" style="margin-right:12px;color:#8ec5ff">${escapeHtml(url)}</a>`).join('<br>')
+        : '<i>No GitHub repository links found.</i>';
+    }
+    function showAllGithubQuestions() {
+      const allQuestions = [];
+      const summaries = [];
+      matches.forEach(item => {
+        (item.github_questions || item.question_sets || []).forEach(set => {
+          summaries.push(set.summary || '');
+          (set.questions || []).forEach(q => allQuestions.push(q));
+        });
+      });
+      localStorage.setItem('githubQuestions', JSON.stringify({
+        questions: allQuestions,
+        summary: summaries.filter(Boolean).join(' | ')
+      }));
+      window.location.href = '/api/analyzer/github_questions';
+    }
+    function downloadAllCSVs() {
+      matches.forEach((item) => {
+        const questionSets = item.github_questions || item.question_sets || [];
+        if (!questionSets.length) return;
+        let csvContent = 'Repo,Summary,Question\\n';
+        questionSets.forEach(set => {
+          const repo = set.repo ? '\"' + String(set.repo).replace(/\"/g, '\"\"') + '\"' : '';
+          const summary = set.summary ? '\"' + String(set.summary).replace(/\"/g, '\"\"') + '\"' : '';
+          (set.questions || ['']).forEach(q => {
+            csvContent += `${repo},${summary},\"${String(q).replace(/\"/g, '\"\"')}\"\\n`;
+          });
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(item.file_name || item.pdf_path || 'resume').replace(/\\.[^/.]+$/, '')}_github_questions.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+    }
+    function applyFilter() {
+      const min = Number(document.getElementById('minMatch').value || 0);
+      const max = Number(document.getElementById('maxMatch').value || 100);
+      render(matches.filter(item => {
+        const pct = Number((item.match_report || {}).percent_match || 0);
+        return pct >= min && pct <= max;
+      }));
+    }
+    renderAllGithubLinks();
+    render(matches);
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from automation.discovery import discover_features, discover_project_templates
+from automation.discovery import discover_features
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -124,14 +124,50 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(by_id["lead-phone-actions"]["category"], "data_features")
             self.assertEqual(by_id["ai-lead-contact-assistant"]["category"], "ai_support")
 
-    def test_project_discovery_search_depth_returns_more_results(self) -> None:
-        shallow = discover_project_templates(include_exploratory=True, limit=None, search_depth=1)
-        deeper = discover_project_templates(include_exploratory=True, limit=None, search_depth=4)
+    def test_discovery_can_use_project_specific_skill_file_for_analyzer(self) -> None:
+        with tempfile.TemporaryDirectory() as backend_dir, tempfile.TemporaryDirectory() as frontend_dir, tempfile.TemporaryDirectory() as features_dir, tempfile.TemporaryDirectory() as skills_dir:
+            backend = Path(backend_dir)
+            frontend = Path(frontend_dir)
+            features = Path(features_dir)
+            skill_file = Path(skills_dir) / "analyzer_skill.json"
 
-        self.assertGreater(len(deeper), len(shallow))
-        shallow_ids = {item["id"] for item in shallow}
-        deeper_ids = {item["id"] for item in deeper}
-        self.assertTrue(shallow_ids.issubset(deeper_ids))
+            skill_file.write_text(
+                json.dumps(
+                    {
+                        "project_name": "hr_automatation_system",
+                        "project_summary": "Analyzer project",
+                        "feature_templates": [
+                            {
+                                "id": "analyzer-submission-review-workbench",
+                                "title": "Add analyzer submission review workbench",
+                                "priority": 40,
+                                "required_backend_files": ["api/routes.py", "services/utils.py"],
+                                "required_frontend_files": [],
+                                "acceptance_criteria": ["Review analyzer submissions"],
+                                "api_contract": ["GET /api/analyzer/forms/:form_id/submissions"],
+                            }
+                        ],
+                    }
+                )
+            )
+
+            self._touch(backend / "api/routes.py")
+            self._touch(backend / "services/utils.py")
+            self._touch(backend / "services/github_questions.py", "github questions\n")
+            self._touch(backend / "services/match_agent.py", "match_report = True\n")
+
+            suggestions = discover_features(
+                backend,
+                frontend,
+                features,
+                write=False,
+                discovery_skill_file=skill_file,
+            )
+
+            ids = {item["id"] for item in suggestions}
+            self.assertIn("analyzer-submission-review-workbench", ids)
+            self.assertNotIn("lead-phone-actions", ids)
+
 
     def _touch(self, path: Path, content: str = "// test fixture\n") -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

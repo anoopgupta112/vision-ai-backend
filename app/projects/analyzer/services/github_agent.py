@@ -61,16 +61,22 @@ def generate_questions_from_github(github_urls: List[str], num_questions: int = 
         return {"questions": [], "summary": "No code found."}
 
     prompt = f"""
-You are a technical interviewer. Read the following code.
-Generate {num_questions} insightful basic technical questions and a short summary.
-Do not reference file names, project names, or repository names in the questions.
+You are a technical interviewer. Read the following code (from multiple GitHub repos, max 200 lines per file). 
+Generate {num_questions} insightful technical basic questions about the codebase and the code not be asking like from this file
+ you have used this so what it works in your project,
+ make question common like suppose a person use for loop then you should not be asking like why you used for loop in you app.py
+  instead of this ask like when we use for loop (general question), and a short summary (like a resume) of the codebase's purpose and technologies.
+  don't use like in this project, in this file, or in this repo make it general question.
+  and ask only basic questions
 
 Respond ONLY with a JSON object with keys:
 - questions: array of strings
 - summary: string
 
+---
 CODE:
 {code_text}
+---
 """
     response_text = _complete_prompt(prompt)
     try:
@@ -85,14 +91,17 @@ def generate_questions_from_jd(jd: str, num_questions: int = 10) -> Dict:
     prompt = f"""
 You are a technical interviewer. Read the following Job Description.
 Generate {num_questions} insightful technical basic questions based on the requirements and skills mentioned in the JD.
+Make the questions general (e.g., "When would you use a microservices architecture?" instead of "Why did you use microservices in this project?").
 Also provide a short summary of the key technical requirements from the JD.
 
 Respond ONLY with a JSON object with keys:
 - questions: array of strings
 - summary: string
 
+---
 Job Description:
 {jd}
+---
 """
     response_text = _complete_prompt(prompt)
     try:
@@ -124,14 +133,18 @@ def generate_questions_from_experience(experience_text: str, num_questions: int 
     prompt = f"""
 You are a technical interviewer. Read the following Experience section from a candidate's resume.
 Generate {num_questions} insightful technical questions based on the projects and roles described.
+Focus on the technologies and challenges mentioned.
+Make the questions specific to their experience but framed as technical inquiries (e.g., "You mentioned working with Kafka. How did you handle message ordering?").
 Also provide a short summary of their key experience highlights.
 
 Respond ONLY with a JSON object with keys:
-- questions: array of strings
+- questions: array of strings (questions should be easy to answer - just a basic level of questions in simple words)
 - summary: string
 
+---
 Experience Section:
 {experience_text}
+---
 """
     response_text = _complete_prompt(prompt)
     try:
@@ -162,13 +175,20 @@ def generate_questions_from_projects(project_text: str) -> List[Dict]:
 
     prompt = f"""
 You are a technical interviewer. Read the following Projects section from a candidate's resume.
-Identify each distinct project and respond ONLY with a JSON array of objects:
-- project_name
-- summary
-- questions
+Identify each distinct project. For each project:
+1. Extract the Project Name.
+2. Write a short summary of the project.
+3. Generate 3-5 basic, easy-to-answer technical questions specific to that project.
 
+Respond ONLY with a JSON array of objects, where each object has:
+- project_name: string
+- summary: string
+- questions: array of strings
+
+---
 Projects Section:
 {project_text}
+---
 """
     response_text = _complete_prompt(prompt)
     try:

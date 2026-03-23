@@ -2,6 +2,8 @@ from functools import wraps
 from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timezone
+from typing import Optional
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from app.core.middleware import auth_required, admin_required, get_current_user
@@ -11,10 +13,10 @@ from app.auth import models as auth_models
 from app.projects.lead_gen import credit_requests
 from app.projects.lead_gen.credits import model as credits_model, pipeline as credits_pipeline
 from app.projects.lead_gen.jobs import model as jobs_model, pipeline as jobs_pipeline
-from automation.discovery import discover_features, discover_project_templates, load_discovery_skill
+from automation.discovery import discover_features, load_discovery_skill
+from automation.custom_feature import expand_feature_description
 from automation.feature_store import find_feature_by_id, load_feature_manifests, save_feature_manifest, update_feature_manifest_status
 from automation.log_store import feature_log_path, read_log_tail
-from automation.market_research import get_live_project_research
 from automation.state_store import append_stage_result, load_state, mark_feature_in_progress
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -201,39 +203,30 @@ def retry_job(job_id):
 @dashboard_key_required
 def list_automation_features():
     backend_repo, frontend_repo = _requested_repo_paths()
+    project = _requested_project()
     include_exploratory = _truthy(request.args.get('include_exploratory'))
     feature_category = (request.args.get('feature_category') or '').strip()
-    include_project_exploratory = _truthy(request.args.get('include_project_exploratory'))
-    project_limit = request.args.get('project_limit', default=3, type=int)
-    project_search_depth = request.args.get('project_search_depth', default=1, type=int)
     all_candidates = _automation_candidate_payload(
         backend_repo,
         frontend_repo,
         include_exploratory=include_exploratory,
+        discovery_skill_file=_project_discovery_skill_file(project),
     )
     filtered_candidates = [
         item for item in all_candidates
         if not feature_category or item.get('category') == feature_category
     ]
-    all_project_candidates = discover_project_templates(
-        include_exploratory=include_project_exploratory,
-        limit=None,
-        search_depth=project_search_depth,
-    )
     payload = {
-        'features': _automation_features_payload(),
+        'features': _automation_features_payload(backend_repo=backend_repo, frontend_repo=frontend_repo),
         'candidates': filtered_candidates,
         'candidate_categories': _candidate_categories(all_candidates),
-        'project_candidates': all_project_candidates[:max(project_limit, 0)],
         'project': {
+            'key': project.get('key', ''),
+            'label': project.get('label', ''),
             'backend_repo': str(backend_repo),
             'frontend_repo': str(frontend_repo),
             'include_exploratory': include_exploratory,
             'feature_category': feature_category,
-            'include_project_exploratory': include_project_exploratory,
-            'project_limit': project_limit,
-            'project_search_depth': project_search_depth,
-            'project_total_available': len(all_project_candidates),
         },
     }
     return jsonify(payload), 200
@@ -311,43 +304,99 @@ def run_automation_feature(feature_id):
     }), 202
 
 
+import json as _json
+
+_PROJECTS_FILE = Path(__file__).resolve().parents[2] / 'automation' / 'projects.json'
+
+
+@bp.route('/automation/projects', methods=['GET'])
+@dashboard_key_required
+def list_automation_projects():
+    """Return the list of projects from automation/projects.json."""
+    try:
+        data = _json.loads(_PROJECTS_FILE.read_text())
+        return jsonify({'projects': data.get('projects', [])}), 200
+    except Exception as exc:
+        return jsonify({'error': str(exc), 'projects': []}), 200
+
+
 @bp.route('/automation/context', methods=['GET'])
 @dashboard_key_required
 def get_automation_context():
-    return jsonify({'context': load_discovery_skill()}), 200
+    backend_repo, frontend_repo = _requested_repo_paths()
+    project = _requested_project()
+    return jsonify({'context': _automation_context_payload(project, backend_repo, frontend_repo)}), 200
 
 
-@bp.route('/automation/projects/<project_id>', methods=['GET'])
+@bp.route('/automation/features/custom', methods=['POST'])
 @dashboard_key_required
-def get_automation_project(project_id):
-    include_project_exploratory = _truthy(request.args.get('include_project_exploratory'))
-    project_search_depth = request.args.get('project_search_depth', default=3, type=int)
-    project = _find_project_candidate_payload(
-        project_id,
-        include_project_exploratory=include_project_exploratory,
-        project_search_depth=project_search_depth,
-    )
-    if not project:
-        return jsonify({'error': 'Project not found'}), 404
-    return jsonify({'project': project}), 200
+def generate_custom_feature():
+    """Expand a plain-language description into a structured feature candidate."""
+    body = request.get_json(silent=True) or {}
+    description = (body.get('description') or '').strip()
+    if not description:
+        return jsonify({'error': 'description is required'}), 400
 
+    backend_repo = (body.get('backend_repo') or '').strip()
+    frontend_repo = (body.get('frontend_repo') or '').strip()
+    project_name = (body.get('project_name') or '').strip()
+    project = _find_project(project_name) if project_name else {}
 
-@bp.route('/automation/projects/<project_id>/live-research', methods=['GET'])
-@dashboard_key_required
-def get_automation_project_live_research(project_id):
-    include_project_exploratory = _truthy(request.args.get('include_project_exploratory'))
-    project_search_depth = request.args.get('project_search_depth', default=3, type=int)
     try:
-        research = get_live_project_research(
-            project_id,
-            include_project_exploratory=include_project_exploratory,
-            project_search_depth=project_search_depth,
+        candidate = expand_feature_description(
+            description=description,
+            backend_repo=backend_repo,
+            frontend_repo=frontend_repo,
+            project_name=(project.get('label') or project_name),
+            skill_file=_project_discovery_skill_file(project),
         )
-    except ValueError:
-        return jsonify({'error': 'Project not found'}), 404
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     except Exception as exc:
-        return jsonify({'error': f'Live research failed: {exc}'}), 502
-    return jsonify({'research': research}), 200
+        return jsonify({'error': f'Feature generation failed: {exc}'}), 500
+
+    return jsonify({'candidate': candidate}), 200
+
+
+@bp.route('/automation/features/custom/save', methods=['POST'])
+@dashboard_key_required
+def save_custom_feature():
+    """Persist a custom feature candidate as a manifest JSON file."""
+    body = request.get_json(silent=True) or {}
+    candidate = body.get('candidate') or {}
+
+    required_fields = ['id', 'title', 'backend_repo', 'frontend_repo', 'branches',
+                       'acceptance_criteria', 'api_contract']
+    for field in required_fields:
+        if not candidate.get(field):
+            return jsonify({'error': f"Missing required field: {field}"}), 400
+
+    # Build a proper manifest-compatible dict
+    manifest_data = {
+        'id': candidate['id'],
+        'title': candidate['title'],
+        'status': 'suggested',
+        'priority': int(candidate.get('priority') or 50),
+        'backend_repo': candidate['backend_repo'],
+        'frontend_repo': candidate['frontend_repo'] or candidate['backend_repo'],
+        'branches': {
+            'backend': candidate['branches'].get('backend', f"agent/{candidate['id']}-backend"),
+            'frontend': candidate['branches'].get('frontend', f"agent/{candidate['id']}-frontend"),
+        },
+        'acceptance_criteria': candidate.get('acceptance_criteria') or [],
+        'api_contract': candidate.get('api_contract') or [],
+        'summary': candidate.get('summary', ''),
+        'implementation_notes': candidate.get('implementation_notes', ''),
+        'category': candidate.get('category', 'core_platform'),
+        '_source': candidate.get('_source', 'custom'),
+    }
+
+    try:
+        path = save_feature_manifest(manifest_data)
+    except Exception as exc:
+        return jsonify({'error': f'Failed to save manifest: {exc}'}), 500
+
+    return jsonify({'saved': True, 'path': str(path), 'id': manifest_data['id']}), 201
 
 
 @bp.route('/automation/dashboard', methods=['GET'])
@@ -357,11 +406,48 @@ def automation_dashboard():
     return send_from_directory(static_dir, 'automation-dashboard.html')
 
 
+@bp.route('/automation/projects/<project_id>', methods=['GET'])
+@dashboard_key_required
+def get_automation_project(project_id):
+    project = _find_project(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    include_exploratory = _truthy(request.args.get('include_project_exploratory'))
+    search_depth = request.args.get('project_search_depth', 3, type=int)
+    return jsonify({
+        'project': _project_detail_payload(
+            project,
+            include_exploratory=include_exploratory,
+            search_depth=search_depth,
+        )
+    }), 200
+
+
+@bp.route('/automation/projects/<project_id>/live-research', methods=['GET'])
+@dashboard_key_required
+def get_automation_project_live_research(project_id):
+    project = _find_project(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    include_exploratory = _truthy(request.args.get('include_project_exploratory'))
+    search_depth = request.args.get('project_search_depth', 3, type=int)
+    return jsonify({
+        'research': _project_live_research_payload(
+            project,
+            include_exploratory=include_exploratory,
+            search_depth=search_depth,
+        )
+    }), 200
+
+
 @bp.route('/automation/projects/<project_id>/dashboard', methods=['GET'])
 @dashboard_key_required
 def automation_project_dashboard(project_id):
+    if not _find_project(project_id):
+        return jsonify({'error': 'Project not found'}), 404
     static_dir = Path(current_app.root_path).parent / 'static'
     return send_from_directory(static_dir, 'automation-project.html')
+
 
 # Credit Request Management
 @bp.route('/credit-requests', methods=['GET'])
@@ -448,13 +534,15 @@ def reject_credit_request(request_id):
     }), 200
 
 
-def _automation_features_payload():
+def _automation_features_payload(backend_repo: Optional[Path] = None, frontend_repo: Optional[Path] = None):
     manifests = load_feature_manifests()
     state = load_state()
     features_state = state.get('features', {})
     payload = []
 
     for manifest in sorted(manifests, key=lambda item: (item.priority, item.id)):
+        if not _manifest_matches_project(manifest, backend_repo=backend_repo, frontend_repo=frontend_repo):
+            continue
         record = features_state.get(manifest.id, {})
         stages = record.get('stages', [])
         payload.append({
@@ -485,12 +573,18 @@ def _find_feature_payload(feature_id):
     return None
 
 
-def _automation_candidate_payload(backend_repo: Path, frontend_repo: Path, include_exploratory: bool = False):
+def _automation_candidate_payload(
+    backend_repo: Path,
+    frontend_repo: Path,
+    include_exploratory: bool = False,
+    discovery_skill_file: Optional[Path] = None,
+):
     candidates = discover_features(
         backend_repo=backend_repo,
         frontend_repo=frontend_repo,
         write=False,
         include_exploratory=include_exploratory,
+        discovery_skill_file=discovery_skill_file,
     )
     return sorted(candidates, key=lambda item: (item.get('priority', 100), item.get('id', '')))
 
@@ -515,36 +609,220 @@ def _candidate_categories(candidates):
 
 
 def _find_candidate_payload(feature_id, backend_repo: Path, frontend_repo: Path, include_exploratory: bool = False):
-    for candidate in _automation_candidate_payload(backend_repo, frontend_repo, include_exploratory=include_exploratory):
+    project = _requested_project()
+    for candidate in _automation_candidate_payload(
+        backend_repo,
+        frontend_repo,
+        include_exploratory=include_exploratory,
+        discovery_skill_file=_project_discovery_skill_file(project),
+    ):
         if candidate['id'] == feature_id:
             return candidate
     return None
 
 
-def _find_project_candidate_payload(
-    project_id,
-    include_project_exploratory: bool = False,
-    project_search_depth: int = 1,
-):
-    for candidate in discover_project_templates(
-        include_exploratory=include_project_exploratory,
-        limit=None,
-        search_depth=project_search_depth,
-    ):
-        if candidate.get('id') == project_id:
-            return candidate
-    return None
 
 
 def _requested_repo_paths():
+    requested_project = _requested_project()
     backend_default = Path(current_app.config.get('BACKEND_REPO_PATH', Path(current_app.root_path).parent))
     frontend_default = Path(current_app.config.get('FRONTEND_REPO_PATH', '/Users/anoopchandra/repositories/main_dashboard_frontend'))
+    if requested_project:
+        backend_default = Path(requested_project.get('backend_repo') or backend_default)
+        frontend_default = Path(requested_project.get('frontend_repo') or frontend_default)
 
     payload = request.get_json(silent=True) or {}
     backend_value = (payload.get('backend_repo') or request.args.get('backend_repo') or str(backend_default)).strip()
     frontend_value = (payload.get('frontend_repo') or request.args.get('frontend_repo') or str(frontend_default)).strip()
 
     return Path(backend_value), Path(frontend_value)
+
+
+def _load_projects():
+    try:
+        data = _json.loads(_PROJECTS_FILE.read_text())
+    except Exception:
+        return []
+    return data.get('projects', [])
+
+
+def _find_project(project_id: str):
+    for project in _load_projects():
+        if project.get('key') == project_id:
+            return project
+    return None
+
+
+def _requested_project():
+    payload = request.get_json(silent=True) or {}
+    project_id = (payload.get('project') or request.args.get('project') or '').strip()
+    if not project_id:
+        return {}
+    return _find_project(project_id) or {}
+
+
+def _automation_context_payload(project: dict, backend_repo: Path, frontend_repo: Path):
+    context = load_discovery_skill(_project_discovery_skill_file(project))
+    project_label = (project or {}).get('label', '').strip()
+    project_key = (project or {}).get('key', '').strip()
+    repo_summary = f"Backend repo: {backend_repo} | Frontend repo: {frontend_repo}"
+
+    if project_label:
+        context['project_name'] = project_label
+        if not context.get('project_summary'):
+            context['project_summary'] = (
+                f"Automation scope for {project_label}. Use the selected repositories when discovering or running features."
+            )
+    elif not context.get('project_summary'):
+        context['project_summary'] = repo_summary
+
+    backend_context = list(context.get('backend_context') or [])
+    frontend_context = list(context.get('frontend_context') or [])
+    backend_line = f"Selected backend repo: {backend_repo}"
+    frontend_line = f"Selected frontend repo: {frontend_repo}"
+    if backend_line not in backend_context:
+        backend_context.insert(0, backend_line)
+    if frontend_line not in frontend_context:
+        frontend_context.insert(0, frontend_line)
+    context['backend_context'] = backend_context
+    context['frontend_context'] = frontend_context
+    context['project_key'] = project_key
+    return context
+
+
+def _norm_path(path) -> Optional[Path]:
+    if not path:
+        return None
+    return Path(path).expanduser().resolve()
+
+
+def _paths_overlap(left, right) -> bool:
+    left_path = _norm_path(left)
+    right_path = _norm_path(right)
+    if not left_path or not right_path:
+        return False
+    return left_path == right_path or right_path in left_path.parents
+
+
+def _manifest_matches_project(manifest, backend_repo: Optional[Path] = None, frontend_repo: Optional[Path] = None):
+    if backend_repo:
+        return _paths_overlap(manifest.backend_repo, backend_repo)
+    if frontend_repo:
+        return _paths_overlap(manifest.frontend_repo, frontend_repo)
+    return True
+
+
+def _project_feature_data(project: dict, include_exploratory: bool = False):
+    backend_repo = Path(project['backend_repo'])
+    frontend_repo = Path(project['frontend_repo'])
+    features = _automation_features_payload(backend_repo=backend_repo, frontend_repo=frontend_repo)
+    candidates = _automation_candidate_payload(
+        backend_repo,
+        frontend_repo,
+        include_exploratory=include_exploratory,
+        discovery_skill_file=_project_discovery_skill_file(project),
+    )
+    return features, candidates
+
+
+def _project_discovery_skill_file(project: dict) -> Optional[Path]:
+    value = (project or {}).get('discovery_skill_file')
+    if not value:
+        return None
+    return Path(value)
+
+
+def _project_detail_payload(project: dict, include_exploratory: bool = False, search_depth: int = 3):
+    features, candidates = _project_feature_data(project, include_exploratory=include_exploratory)
+    candidate_titles = [item.get('title') for item in candidates[:max(search_depth, 1)] if item.get('title')]
+    feature_titles = [item.get('title') for item in features[:max(search_depth, 1)] if item.get('title')]
+    scoped_features = feature_titles or candidate_titles or ['No automation opportunities discovered yet']
+    project_label = project.get('label') or project.get('key') or 'Project'
+
+    return {
+        'id': project.get('key'),
+        'title': project_label,
+        'summary': f"Automation scope for {project_label} using the configured backend and frontend repositories.",
+        'why_now': f"{len(candidates)} candidate feature(s) and {len(features)} tracked feature(s) are available for this project.",
+        'market_value': 'Internal delivery acceleration and clearer automation visibility for this project area.',
+        'priority': max(10, 100 - min(len(candidates) * 10 + len(features) * 5, 80)),
+        'market_research': [
+            'Current view is generated from local repository analysis.',
+            f"Backend repo: {project.get('backend_repo')}",
+            f"Frontend repo: {project.get('frontend_repo')}",
+        ],
+        'growth_chances': [
+            'Add more project-specific discovery templates to increase suggestion quality.',
+            'Keep manifests scoped to their project repos so the dashboard stays accurate.',
+        ],
+        'benefits': [
+            'Project selection now scopes context and tracked features.',
+            'Feature discovery can focus on the chosen backend/frontend pair.',
+        ],
+        'future_scope_ai': [
+            'Use LLM-assisted project-specific feature planning.',
+            'Add live external market research when network-backed research is reintroduced.',
+        ],
+        'project_features': scoped_features,
+        'suggested_pages': ['Automation dashboard', 'Project detail dashboard'],
+        'build_requirements': [
+            'Maintain project registry entries with backend/frontend repo paths.',
+            'Keep feature manifests aligned with the project they target.',
+        ],
+        'ai_tools': ['Codex automation orchestrator', 'Repository-based discovery rules'],
+        'example_user': {
+            'persona': 'Internal operator or admin',
+            'scenario': f"Reviews {project_label} opportunities, approves candidates, and runs automation from the dashboard.",
+        },
+        'competitors': [
+            {
+                'name': 'Current manual process',
+                'website': '',
+                'pricing_summary': 'Engineer time and coordination overhead',
+                'fit': 'Baseline alternative before dashboard automation',
+            }
+        ],
+        'market_pricing': {
+            'competitor_range': 'Not available from local-only analysis',
+            'our_offer': 'Project-scoped automation planning and execution',
+            'our_starting_price': 'Internal tooling',
+        },
+        'what_extra_we_give': [
+            'Project-scoped context',
+            'Tracked feature state',
+            'Candidate generation from repository structure',
+        ],
+        'cost_estimate': {
+            'build_cost': 'Low incremental cost within the current automation system',
+            'monthly_run_cost': 'Depends on Codex/validation usage',
+            'cost_drivers': ['Repository scan size', 'Automation run frequency', 'Validation depth'],
+        },
+        'research_sources': [],
+    }
+
+
+def _project_live_research_payload(project: dict, include_exploratory: bool = False, search_depth: int = 3):
+    features, candidates = _project_feature_data(project, include_exploratory=include_exploratory)
+    checked = max(len(features) + len(candidates), 1)
+    return {
+        'fetched_at': datetime.now(timezone.utc).isoformat(),
+        'summary': {
+            'sources_checked': checked,
+            'sources_available': checked,
+            'why_this_project': f"Repository analysis found {len(candidates)} candidate(s) and {len(features)} tracked feature(s) for {project.get('label') or project.get('key')}.",
+            'market_value': 'Live web research is not configured here; this summary is based on current repository signals.',
+            'market_signals': [
+                f"Search depth requested: {max(search_depth, 1)}",
+                f"Exploratory discovery: {'enabled' if include_exploratory else 'disabled'}",
+            ],
+        },
+        'sources': [
+            {
+                'label': 'Local repository analysis',
+                'url': '',
+            }
+        ],
+    }
 
 
 def _truthy(value):

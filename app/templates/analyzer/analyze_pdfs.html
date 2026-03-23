@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Analyze PDFs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--muted:#9fb0c5;--line:#1e2d49;--acc:#6366f1;--acc2:#22d3ee}
+    *{box-sizing:border-box} html,body{margin:0;background:#0b1220;color:#e2e8f0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .nav{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,rgba(2,6,23,.85),rgba(2,6,23,.5));backdrop-filter:blur(8px);border-bottom:1px solid #11213a}
+    .nav-inner{max-width:1000px;margin:0 auto;display:flex;align-items:center;padding:14px 20px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
+    .dot{width:26px;height:26px;border-radius:8px;background:conic-gradient(from 140deg,#6366f1,#22d3ee,#38bdf8,#6366f1)}
+    .links{margin-left:auto;display:flex;gap:12px}
+    .link{padding:8px 12px;border-radius:10px;color:#cbd5e1;border:1px solid transparent;text-decoration:none}
+    .link:hover{border-color:#2a3f63;background:#0c1e37}
+    .container{max-width:1000px;margin:28px auto;padding:0 20px}
+    .card{background:linear-gradient(180deg,rgba(148,163,184,.06),rgba(148,163,184,.03));border:1px solid var(--line);border-radius:18px;padding:24px;margin-bottom:18px}
+    textarea{width:100%;min-height:120px;padding:12px;border:1px solid #213456;border-radius:12px;background:#0b172c;color:#e5edff}
+    .jd-editor{width:100%;min-height:180px;padding:12px;border:1px solid #213456;border-radius:12px;background:#0b172c;color:#e5edff;white-space:pre-wrap;outline:none}
+    .jd-editor:empty:before{content:attr(data-placeholder);color:#7f93b3}
+    .helper-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .helper-note{color:#9fb0c5;font-size:13px}
+    .pdf-list{max-height:420px;overflow:auto;border:1px solid #20375d;border-radius:12px;padding:8px;background:#0b1526}
+    .pdf-item{display:flex;align-items:center;gap:12px;padding:10px 8px;border-bottom:1px dashed #172a47}
+    .controls{display:flex;gap:10px;margin-top:12px}
+    .btn{padding:12px 16px;border:none;border-radius:12px;font-weight:800;cursor:pointer}
+    .btn-primary{background:linear-gradient(90deg,#6366f1,#22d3ee);color:white}
+    .btn-secondary{background:#0f2039;border:1px solid #223a61;color:#cfe4ff}
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <div class="brand"><span class="dot"></span>Analyze PDFs</div>
+      <div class="links">
+        <a class="link" href="/api/analyzer">Home</a>
+        <a class="link" href="/api/analyzer/form-builder">Form Builder</a>
+        <a class="link" href="/api/analyzer/match_results">Results</a>
+      </div>
+    </div>
+  </div>
+  <div class="container">
+    <div class="card"><h1>Analyze PDFs</h1></div>
+    <div class="card">
+      <h2>Job Description</h2>
+      <div class="helper-row">
+        <button type="button" class="btn btn-secondary" onclick="pasteFromClipboard()">Paste from Clipboard</button>
+        <span class="helper-note">If direct paste is blocked, use this button or type in the editor below.</span>
+      </div>
+      <div id="jdEditor" class="jd-editor" contenteditable="true" data-placeholder="Enter the job description here..."></div>
+      <textarea id="jdText" placeholder="Enter the job description here..." style="display:none"></textarea>
+    </div>
+    <div class="card">
+      <h2>Select PDFs to Analyze</h2>
+      <div>
+        <button type="button" class="btn btn-secondary" onclick="selectAll()">Select All</button>
+        <button type="button" class="btn btn-secondary" onclick="deselectAll()">Deselect All</button>
+        <span id="selectedCount">0 of {{ pdfs|length }} selected</span>
+      </div>
+      <div class="pdf-list" style="margin-top:10px;">
+        {% for pdf in pdfs %}
+        <div class="pdf-item">
+          <input type="checkbox" id="pdf_{{ loop.index }}" value="{{ pdf.name }}" checked>
+          <label for="pdf_{{ loop.index }}" class="pdf-name">{{ pdf.name }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="controls">
+        <button type="button" class="btn btn-secondary" onclick="window.history.back()">Back</button>
+        <button type="button" class="btn btn-primary" onclick="analyzePDFs()">Analyze Selected PDFs</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const formId = '{{ form_id }}';
+    const totalPDFs = {{ pdfs|length }};
+    const jdEditor = document.getElementById('jdEditor');
+    const jdText = document.getElementById('jdText');
+    function syncJdText() {
+      jdText.value = jdEditor.innerText.trim();
+    }
+    function updateSelectedCount() {
+      document.getElementById('selectedCount').textContent = `${document.querySelectorAll('input[type="checkbox"]:checked').length} of ${totalPDFs} selected`;
+    }
+    function selectAll(){ document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true); updateSelectedCount(); }
+    function deselectAll(){ document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false); updateSelectedCount(); }
+    function getSelectedPDFs(){ return Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value); }
+    jdEditor.addEventListener('input', syncJdText);
+    jdEditor.addEventListener('paste', () => window.setTimeout(syncJdText, 0));
+    async function pasteFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        jdEditor.innerText = text;
+        syncJdText();
+        jdEditor.focus();
+      } catch (error) {
+        alert('Clipboard paste was blocked by the browser. Use Ctrl+V or Cmd+V in the editor.');
+      }
+    }
+    async function analyzePDFs() {
+      syncJdText();
+      const formData = new FormData();
+      formData.append('jd', jdText.value.trim());
+      formData.append('selected_pdfs', JSON.stringify(getSelectedPDFs()));
+      const response = await fetch(`/api/analyzer/v1/analyze_from_excel/${formId}`, {
+        method:'POST',
+        headers: {'Authorization': localStorage.getItem('auth_token') || ''},
+        body: formData
+      });
+      const result = await response.json();
+      localStorage.setItem('matchResults', JSON.stringify({matches: result.matches || result}));
+      window.location.href = '/api/analyzer/match_results';
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', updateSelectedCount));
+      updateSelectedCount();
+    });
+  </script>
+</body>
+</html>

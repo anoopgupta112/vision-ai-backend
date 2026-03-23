@@ -1,0 +1,100 @@
+{
+  "project_name": "hr_automatation_system",
+  "project_summary": "An HR automation and resume analysis workflow that creates forms, accepts candidate submissions, evaluates resumes against job descriptions, and generates GitHub- and project-based interview questions.",
+  "discovery_goals": [
+    "Suggest features grounded in the analyzer form, submission, resume analysis, and interview-question flows.",
+    "Prefer recruiter and operator workflows that make candidate review faster and easier to understand.",
+    "Avoid lead-generation, payment, admin-dashboard, and marketing-site suggestions for this project."
+  ],
+  "backend_context": [
+    "Analyzer routes support metadata, form creation, form submissions, resume-vs-JD analysis, and GitHub question generation.",
+    "Analyzer services include OCR extraction, resume matching, GitHub/project question generation, and file-backed storage.",
+    "The project already has reusable template, submission, and analysis entry points in the analyzer API."
+  ],
+  "frontend_context": [
+    "Frontend scope should focus on analyzer-specific forms, submission review, score presentation, and recruiter workflows.",
+    "Do not treat shared lead-generation or payment screens as the primary context for this project."
+  ],
+  "feature_templates": [
+    {
+      "id": "analyzer-form-template-library",
+      "title": "Add analyzer form template library and cloning flow",
+      "priority": 35,
+      "category": "product_workflow",
+      "required_backend_files": [
+        "api/routes.py",
+        "api/templates_config.py"
+      ],
+      "required_frontend_files": [],
+      "acceptance_criteria": [
+        "Users can start from curated analyzer form templates instead of building every form from scratch",
+        "Existing templates can be previewed and cloned into a new form",
+        "Analyzer form creation remains backward compatible"
+      ],
+      "api_contract": [
+        "GET /api/analyzer/v1/templates",
+        "POST /api/analyzer/forms"
+      ]
+    },
+    {
+      "id": "analyzer-submission-review-workbench",
+      "title": "Add analyzer submission review workbench",
+      "priority": 40,
+      "category": "product_workflow",
+      "required_backend_files": [
+        "api/routes.py",
+        "services/utils.py"
+      ],
+      "required_frontend_files": [],
+      "acceptance_criteria": [
+        "Users can review analyzer submissions with clearer status, timestamps, and submission metadata",
+        "Reviewers can open a submission and see all uploaded artifacts in one workflow",
+        "Analyzer submission and form flows remain green"
+      ],
+      "api_contract": [
+        "GET /api/analyzer/forms",
+        "GET /api/analyzer/forms/:form_id/submissions"
+      ]
+    },
+    {
+      "id": "analyzer-score-breakdown",
+      "title": "Add analyzer score breakdown and recruiter summary",
+      "priority": 45,
+      "category": "ai_support",
+      "required_backend_files": [
+        "api/routes.py",
+        "services/match_agent.py"
+      ],
+      "required_frontend_files": [],
+      "acceptance_criteria": [
+        "Resume analysis results show a clearer score breakdown and short recruiter-facing summary",
+        "Users can understand why a resume matched or missed the job description",
+        "Analyzer matching flows remain green"
+      ],
+      "api_contract": [
+        "POST /api/analyzer/forms/:form_id/analyze",
+        "POST /api/analyzer/v1/match_from_pdfs"
+      ]
+    },
+    {
+      "id": "analyzer-github-question-review",
+      "title": "Add GitHub question review and export for analyzer",
+      "priority": 50,
+      "category": "product_workflow",
+      "required_backend_files": [
+        "api/routes.py",
+        "services/github_questions.py"
+      ],
+      "required_frontend_files": [],
+      "acceptance_criteria": [
+        "Generated GitHub and project question sets are easier to review before an interview",
+        "Users can export or copy structured question packs",
+        "Analyzer GitHub question generation remains green"
+      ],
+      "api_contract": [
+        "POST /api/analyzer/v1/github_questions",
+        "POST /api/analyzer/v1/match_from_pdfs"
+      ]
+    }
+  ]
+}

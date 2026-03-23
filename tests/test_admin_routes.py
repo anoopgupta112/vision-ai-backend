@@ -61,8 +61,8 @@ class AdminRoutesTestCase(unittest.TestCase):
         jobs_collection.count_documents.return_value = 14
         leads_collection.count_documents.return_value = 88
         get_collection.side_effect = lambda name: {
-            "jobs": jobs_collection,
-            "leads": leads_collection,
+            "lead_jobs": jobs_collection,
+            "lead_leads": leads_collection,
         }[name]
 
         decode_token, find_user = self._admin_patches()
@@ -189,7 +189,6 @@ class AdminRoutesTestCase(unittest.TestCase):
         retry_job.assert_called_once_with("job-1")
 
     @patch("app.admin.views.read_log_tail")
-    @patch("app.admin.views.discover_project_templates")
     @patch("app.admin.views.discover_features")
     @patch("app.admin.views.load_state")
     @patch("app.admin.views.load_feature_manifests")
@@ -198,7 +197,6 @@ class AdminRoutesTestCase(unittest.TestCase):
         load_feature_manifests,
         load_state,
         discover_features,
-        discover_project_templates,
         read_log_tail,
     ):
         feature = MagicMock()
@@ -211,6 +209,8 @@ class AdminRoutesTestCase(unittest.TestCase):
         feature.acceptance_criteria = ["Enable alerts"]
         feature.api_contract = ["POST /api/lead_gen/saved-searches/:id/alerts"]
         feature.source_file = "automation/features/saved_search_alerts.json"
+        feature.backend_repo = "/tmp/backend"
+        feature.frontend_repo = "/tmp/frontend"
         load_feature_manifests.return_value = [feature]
         load_state.return_value = {
             "features": {
@@ -243,19 +243,9 @@ class AdminRoutesTestCase(unittest.TestCase):
                 "api_contract": ["GET /api/lead_gen/credits/history/export"],
             }
         ]
-        discover_project_templates.return_value = [
-            {
-                "id": "lead-gen-marketing-site",
-                "title": "Lead Generation Marketing Site",
-                "priority": 10,
-                "summary": "Standalone marketing site",
-                "why_now": "No public acquisition flow yet",
-                "suggested_pages": ["Landing page", "Pricing page"],
-            }
-        ]
 
         response = self.client.get(
-            "/api/admin/automation/features?backend_repo=/tmp/backend&frontend_repo=/tmp/frontend&include_exploratory=true&feature_category=data_features&include_project_exploratory=true&project_search_depth=2",
+            "/api/admin/automation/features?backend_repo=/tmp/backend&frontend_repo=/tmp/frontend&include_exploratory=true&feature_category=data_features",
             headers=self.dashboard_headers,
         )
 
@@ -267,17 +257,11 @@ class AdminRoutesTestCase(unittest.TestCase):
         self.assertTrue(payload["features"][0]["can_approve"])
         self.assertEqual(payload["candidates"][0]["id"], "credit-history-export")
         self.assertEqual(payload["candidate_categories"][0]["key"], "data_features")
-        self.assertEqual(payload["project_candidates"][0]["id"], "lead-gen-marketing-site")
         self.assertEqual(payload["project"]["backend_repo"], "/tmp/backend")
         self.assertEqual(payload["project"]["frontend_repo"], "/tmp/frontend")
         self.assertTrue(payload["project"]["include_exploratory"])
         self.assertEqual(payload["project"]["feature_category"], "data_features")
-        self.assertTrue(payload["project"]["include_project_exploratory"])
-        self.assertEqual(payload["project"]["project_limit"], 3)
-        self.assertEqual(payload["project"]["project_search_depth"], 2)
-        self.assertEqual(payload["project"]["project_total_available"], 1)
         discover_features.assert_called_once()
-        discover_project_templates.assert_called_once_with(include_exploratory=True, limit=None, search_depth=2)
 
     @patch("app.admin.views.load_discovery_skill")
     def test_get_automation_context_returns_discovery_skill(self, load_discovery_skill):
@@ -292,56 +276,90 @@ class AdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["context"]["project_name"], "Main Dashboard")
 
-    @patch("app.admin.views.discover_project_templates")
-    def test_get_automation_project_returns_project_detail(self, discover_project_templates):
-        discover_project_templates.return_value = [
-            {
-                "id": "ai-search-ops-studio",
-                "title": "AI Search Operations Studio",
-                "priority": 60,
-                "summary": "AI-assisted search operations product",
-                "why_now": "Natural extension of the search workflow",
-                "market_value": "High value for operator workflows",
-                "market_research": ["Teams need search tuning support"],
-                "growth_chances": ["Can grow into premium ops tooling"],
-                "benefits": ["Better search quality"],
-                "future_scope_ai": ["AI query rewrite suggestions"],
-                "project_features": ["Saved-search optimizer"],
-                "suggested_pages": ["Search strategy dashboard"],
-            }
-        ]
-
-        response = self.client.get(
-            "/api/admin/automation/projects/ai-search-ops-studio?include_project_exploratory=true&project_search_depth=4",
-            headers=self.dashboard_headers,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["project"]["id"], "ai-search-ops-studio")
-        discover_project_templates.assert_called_once_with(include_exploratory=True, limit=None, search_depth=4)
-
-    @patch("app.admin.views.get_live_project_research")
-    def test_get_automation_project_live_research_returns_payload(self, get_live_project_research):
-        get_live_project_research.return_value = {
-            "project_id": "ai-search-ops-studio",
-            "fetched_at": "2026-03-20T00:00:00+00:00",
-            "sources": [{"label": "OpenAI API pricing", "status": "ok"}],
-            "summary": {"sources_checked": 1, "sources_available": 1, "market_signals": ["Pricing page is available"]},
-            "competitor_snapshot": [],
+    @patch("app.admin.views.load_discovery_skill")
+    def test_get_automation_context_uses_selected_project_scope(self, load_discovery_skill):
+        load_discovery_skill.return_value = {
+            "project_name": "Main Dashboard",
+            "project_summary": "Lead generation platform",
+            "backend_context": [],
+            "frontend_context": [],
+            "feature_templates": [{"id": "job-retry-controls"}],
         }
 
         response = self.client.get(
-            "/api/admin/automation/projects/ai-search-ops-studio/live-research?include_project_exploratory=true&project_search_depth=5",
+            "/api/admin/automation/context?project=lead_gen",
             headers=self.dashboard_headers,
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["research"]["project_id"], "ai-search-ops-studio")
-        get_live_project_research.assert_called_once_with(
-            "ai-search-ops-studio",
-            include_project_exploratory=True,
-            project_search_depth=5,
+        payload = response.get_json()["context"]
+        self.assertEqual(payload["project_name"], "Lead Generation")
+        self.assertEqual(payload["project_key"], "lead_gen")
+        self.assertIn("Selected backend repo:", payload["backend_context"][0])
+
+    def test_get_automation_context_uses_analyzer_project_metadata(self):
+        response = self.client.get(
+            "/api/admin/automation/context?project=analyzer",
+            headers=self.dashboard_headers,
         )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()["context"]
+        self.assertEqual(payload["project_name"], "hr_automatation_system")
+        self.assertEqual(payload["project_key"], "analyzer")
+        self.assertIn("resume analysis", payload["project_summary"].lower())
+
+    @patch("app.admin.views.read_log_tail")
+    @patch("app.admin.views.discover_features")
+    @patch("app.admin.views.load_state")
+    @patch("app.admin.views.load_feature_manifests")
+    def test_list_automation_features_filters_tracked_features_by_backend_project_scope(
+        self,
+        load_feature_manifests,
+        load_state,
+        discover_features,
+        read_log_tail,
+    ):
+        matching_feature = MagicMock()
+        matching_feature.id = "analyzer-score-breakdown"
+        matching_feature.title = "Analyzer score breakdown"
+        matching_feature.status = "suggested"
+        matching_feature.priority = 45
+        matching_feature.backend_branch = "agent/analyzer-score-breakdown-backend"
+        matching_feature.frontend_branch = "agent/analyzer-score-breakdown-frontend"
+        matching_feature.acceptance_criteria = ["Show score breakdown"]
+        matching_feature.api_contract = ["POST /api/analyzer/v1/match_from_pdfs"]
+        matching_feature.source_file = "automation/features/analyzer_score_breakdown.json"
+        matching_feature.backend_repo = "/Users/anoopchandra/repositories/main_dashboard/app/projects/analyzer"
+        matching_feature.frontend_repo = "/Users/anoopchandra/repositories/main_dashboard_frontend"
+
+        unrelated_feature = MagicMock()
+        unrelated_feature.id = "payment-history-export"
+        unrelated_feature.title = "Payment history export"
+        unrelated_feature.status = "suggested"
+        unrelated_feature.priority = 40
+        unrelated_feature.backend_branch = "agent/payment-history-export-backend"
+        unrelated_feature.frontend_branch = "agent/payment-history-export-frontend"
+        unrelated_feature.acceptance_criteria = ["Export payment history"]
+        unrelated_feature.api_contract = ["GET /api/payments/history/export"]
+        unrelated_feature.source_file = "automation/features/payment_history_export.json"
+        unrelated_feature.backend_repo = "/Users/anoopchandra/repositories/main_dashboard"
+        unrelated_feature.frontend_repo = "/Users/anoopchandra/repositories/main_dashboard_frontend"
+
+        load_feature_manifests.return_value = [matching_feature, unrelated_feature]
+        load_state.return_value = {"features": {}}
+        discover_features.return_value = []
+        read_log_tail.return_value = []
+
+        response = self.client.get(
+            "/api/admin/automation/features?project=analyzer",
+            headers=self.dashboard_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual([item["id"] for item in payload["features"]], ["analyzer-score-breakdown"])
+
 
     @patch("app.admin.views.update_feature_manifest_status")
     @patch("app.admin.views.save_feature_manifest")
@@ -502,26 +520,60 @@ class AdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.content_type)
         body = response.get_data(as_text=True)
-        self.assertIn("Project Automation Board", body)
-        self.assertIn("Project Features", body)
-        self.assertIn("Projects", body)
+        self.assertIn("Feature Automation Board", body)
+        self.assertIn("Features On This Project", body)
         self.assertIn("Suggest More Features", body)
-        self.assertIn("Suggest More Projects", body)
-        self.assertIn("Project Suggestions", body)
 
-    def test_automation_project_dashboard_serves_html_shell(self):
+    def test_project_dashboard_serves_html_shell(self):
         response = self.client.get(
-            "/api/admin/automation/projects/ai-search-ops-studio/dashboard",
+            "/api/admin/automation/projects/lead_gen/dashboard",
             headers=self.dashboard_headers,
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.content_type)
-        body = response.get_data(as_text=True)
-        self.assertIn("Automation Project Detail", body)
-        self.assertIn("Future Scope With AI", body)
-        self.assertIn("Competitors In Market", body)
-        self.assertIn("Live Market Research", body)
+        self.assertIn("Automation Project Detail", response.get_data(as_text=True))
+
+    @patch("app.admin.views._automation_candidate_payload")
+    @patch("app.admin.views._automation_features_payload")
+    def test_get_automation_project_returns_project_payload(
+        self,
+        automation_features_payload,
+        automation_candidate_payload,
+    ):
+        automation_features_payload.return_value = [{"title": "Tracked feature"}]
+        automation_candidate_payload.return_value = [{"title": "Candidate feature"}]
+
+        response = self.client.get(
+            "/api/admin/automation/projects/lead_gen",
+            headers=self.dashboard_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()["project"]
+        self.assertEqual(payload["id"], "lead_gen")
+        self.assertEqual(payload["title"], "Lead Generation")
+        self.assertIn("Tracked feature", payload["project_features"])
+
+    @patch("app.admin.views._automation_candidate_payload")
+    @patch("app.admin.views._automation_features_payload")
+    def test_get_automation_project_live_research_returns_local_summary(
+        self,
+        automation_features_payload,
+        automation_candidate_payload,
+    ):
+        automation_features_payload.return_value = [{"title": "Tracked feature"}]
+        automation_candidate_payload.return_value = [{"title": "Candidate feature"}]
+
+        response = self.client.get(
+            "/api/admin/automation/projects/lead_gen/live-research",
+            headers=self.dashboard_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()["research"]
+        self.assertIn("fetched_at", payload)
+        self.assertEqual(payload["summary"]["sources_checked"], 2)
 
     def test_automation_dashboard_rejects_invalid_dashboard_key(self):
         response = self.client.get(

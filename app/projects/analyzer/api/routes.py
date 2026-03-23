@@ -1,9 +1,10 @@
 import json
 import os
+import re
 import tempfile
 import uuid
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, render_template, send_file
 
 from app.projects.analyzer.api.payloads import CUSTOM_FIELD_TYPES, FIELD_DEFINITIONS
 from app.projects.analyzer.api.templates_config import get_all_templates, get_template_by_name
@@ -23,6 +24,62 @@ from app.projects.analyzer.services.utils import get_form_submissions
 from app.core.middleware import auth_required, get_current_user
 
 bp = Blueprint("analyzer", __name__, url_prefix="/api/analyzer")
+
+
+@bp.route("", methods=["GET"])
+@auth_required
+def landing_page():
+    return render_template("analyzer/landing.html")
+
+
+@bp.route("/", methods=["GET"])
+@auth_required
+def landing_page_slash():
+    return render_template("analyzer/landing.html")
+
+
+@bp.route("/form-builder", methods=["GET"])
+@auth_required
+def form_builder():
+    return render_template("analyzer/index.html")
+
+
+@bp.route("/match_upload", methods=["GET"])
+@auth_required
+def upload_resumes_page():
+    return render_template("analyzer/match_upload.html")
+
+
+@bp.route("/match_results", methods=["GET"])
+@auth_required
+def match_results():
+    return render_template("analyzer/match_results.html")
+
+
+@bp.route("/github_questions", methods=["GET"])
+@auth_required
+def github_questions_page():
+    return render_template("analyzer/github_questions.html")
+
+
+@bp.route("/forms/<form_id>/view", methods=["GET"])
+def serve_form_page(form_id):
+    form = storage.get_form(form_id)
+    if not form:
+        return jsonify({"error": "Form not found."}), 404
+    return render_template("analyzer/form.html", fields=form["fields"], form_id=form_id)
+
+
+@bp.route("/analyze_pdfs/<form_id>", methods=["GET"])
+@auth_required
+def analyze_pdfs_page(form_id):
+    submissions = storage.get_form_submissions(form_id)
+    pdf_list = []
+    for sub in submissions:
+        for value in sub.values():
+            if isinstance(value, dict) and value.get("name"):
+                pdf_list.append({"name": value["name"], "path": value.get("path", ""), "submission_id": sub.get("id", "")})
+    return render_template("analyzer/analyze_pdfs.html", form_id=form_id, pdfs=pdf_list)
 
 
 def _build_fields(selected_fields, custom_fields):
@@ -245,7 +302,7 @@ def create_form():
 
     form_id = str(uuid.uuid4())[:10]
     storage.create_form(form_id, fields, user_id=str(user["_id"]), name=form_name)
-    return jsonify({"form_url": f"/api/analyzer/v1/data/{form_id}", "fields": fields, "form_id": form_id})
+    return jsonify({"form_url": f"/api/analyzer/forms/{form_id}/view", "fields": fields, "form_id": form_id})
 
 
 @bp.route("/v1/data/<form_id>", methods=["GET"])
@@ -348,7 +405,11 @@ def analyze_from_excel(form_id):
             match_report = evaluate_resume_against_jd(jd, resume_text)
             github_questions = []
             github_links = [item["uri"] for item in links if isinstance(item, dict) and "uri" in item]
-            for github_url in sorted(set(github_links)):
+            repo_links = []
+            for github_url in github_links:
+                if re.match(r"https://github.com/[^/]+/[^/]+", github_url):
+                    repo_links.append(github_url)
+            for github_url in sorted(set(repo_links)):
                 qdata = generate_questions_from_github([github_url], 10)
                 if qdata.get("summary") == "No code found.":
                     continue
