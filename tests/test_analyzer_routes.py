@@ -69,8 +69,14 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Fill the Form", response.get_data(as_text=True))
 
+    @patch("app.projects.analyzer.api.routes.storage.get_form")
     @patch("app.projects.analyzer.api.routes.storage.get_form_submissions")
-    def test_analyze_pdfs_page_renders(self, get_form_submissions):
+    def test_analyze_pdfs_page_renders(self, get_form_submissions, get_form):
+        get_form.return_value = {
+            "form_id": "form123",
+            "user_id": "user-1",
+            "fields": [{"name": "resume", "label": "Resume", "data_type": "file", "accept": ["pdf"]}],
+        }
         get_form_submissions.return_value = [
             {"id": "sub1", "resume": {"name": "resume.pdf", "path": "/tmp/resume.pdf"}}
         ]
@@ -79,6 +85,37 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Analyze PDFs", response.get_data(as_text=True))
+
+    @patch("app.projects.analyzer.api.routes.storage.get_form")
+    def test_form_submissions_rejects_non_owner(self, get_form):
+        get_form.return_value = {
+            "form_id": "form123",
+            "user_id": "user-2",
+            "fields": [{"name": "resume", "label": "Resume", "data_type": "file"}],
+        }
+
+        response = self.client.get("/api/analyzer/forms/form123/submissions", headers=AUTH_HEADERS)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json(), {"error": "Access denied"})
+
+    @patch("app.projects.analyzer.api.routes.storage.get_form")
+    def test_analyze_saved_pdfs_rejects_non_owner(self, get_form):
+        get_form.return_value = {
+            "form_id": "form123",
+            "user_id": "user-2",
+            "fields": [{"name": "resume", "label": "Resume", "data_type": "file"}],
+        }
+
+        response = self.client.post(
+            "/api/analyzer/v1/analyze_from_excel/form123",
+            data={"jd": "Python developer"},
+            headers=AUTH_HEADERS,
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json(), {"error": "Access denied"})
 
     def test_github_questions_requires_urls(self):
         with patch(
@@ -114,8 +151,10 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         create_form.assert_called_once()
         self.assertEqual(response.get_json()["form"]["name"], "Hiring Intake")
 
+    @patch("app.projects.analyzer.api.routes.credits_pipeline.deduct_credits")
+    @patch("app.projects.analyzer.api.routes.credits_pipeline.get_user_balance", return_value=5)
     @patch("app.projects.analyzer.api.routes.process_uploaded_pdfs", return_value=[{"pdf_path": "resume.pdf", "match_report": {}, "github_questions": [], "links": []}])
-    def test_resume_match_returns_results(self, process_uploaded_pdfs):
+    def test_resume_match_returns_results(self, process_uploaded_pdfs, get_user_balance, deduct_credits):
         response = self.client.post(
             "/api/analyzer/v1/match_from_pdfs",
             data={
@@ -128,7 +167,131 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"matches": [{"file_name": "resume.pdf", "pdf_path": "resume.pdf", "match_report": {}, "question_sets": [], "github_questions": [], "links": [], "resume_text": ""}]})
+        get_user_balance.assert_called_once_with("user-1")
+        deduct_credits.assert_called_once_with("user-1", 1, note="Analyzer usage: matched 1 uploaded PDF(s)")
         process_uploaded_pdfs.assert_called_once()
+
+    def test_resume_match_deducts_credits_for_uploaded_pdfs(self):
+        with patch(
+            "app.projects.analyzer.api.routes.process_uploaded_pdfs",
+            return_value=[
+                {"pdf_path": "resume-1.pdf", "match_report": {}, "github_questions": [], "links": []},
+                {"pdf_path": "resume-2.pdf", "match_report": {}, "github_questions": [], "links": []},
+            ],
+        ) as process_uploaded_pdfs, patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.get_user_balance",
+            return_value=5,
+        ) as get_user_balance, patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.deduct_credits"
+        ) as deduct_credits:
+            response = self.client.post(
+                "/api/analyzer/v1/match_from_pdfs",
+                data={
+                    "jd": "Python developer with Flask experience",
+                    "pdf_files": [
+                        (BytesIO(b"fake pdf 1"), "resume-1.pdf"),
+                        (BytesIO(b"fake pdf 2"), "resume-2.pdf"),
+                    ],
+                },
+                headers=AUTH_HEADERS,
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["matches"]), 2)
+        get_user_balance.assert_called_once_with("user-1")
+        deduct_credits.assert_called_once_with("user-1", 2, note="Analyzer usage: matched 2 uploaded PDF(s)")
+        process_uploaded_pdfs.assert_called_once()
+
+    def test_resume_match_returns_insufficient_credit_error_before_processing(self):
+        with patch(
+            "app.projects.analyzer.api.routes.process_uploaded_pdfs"
+        ) as process_uploaded_pdfs, patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.get_user_balance",
+            return_value=0,
+        ) as get_user_balance, patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.deduct_credits"
+        ) as deduct_credits:
+            response = self.client.post(
+                "/api/analyzer/v1/match_from_pdfs",
+                data={
+                    "jd": "Python developer with Flask experience",
+                    "pdf_files": (BytesIO(b"fake pdf"), "resume.pdf"),
+                },
+                headers=AUTH_HEADERS,
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json(), {"error": "Insufficient credits. You have 0, need 1"})
+        get_user_balance.assert_called_once_with("user-1")
+        deduct_credits.assert_not_called()
+        process_uploaded_pdfs.assert_not_called()
+
+    def test_form_analysis_deducts_credits_for_selected_pdfs(self):
+        submission_docs = [
+            {"_id": "sub-1", "data": {"resume": {"path": "/tmp/resume-1.pdf", "name": "resume-1.pdf"}}},
+            {"_id": "sub-2", "data": {"resume": {"path": "/tmp/resume-2.pdf", "name": "resume-2.pdf"}}},
+        ]
+
+        with patch(
+            "app.projects.analyzer.api.routes.storage.get_form",
+            return_value={
+                "form_id": "form123",
+                "user_id": "user-1",
+                "fields": [{"name": "resume", "label": "Resume", "data_type": "file"}],
+            },
+        ), patch(
+            "app.projects.analyzer.api.routes.storage.get_submission_documents",
+            return_value=submission_docs,
+        ), patch(
+            "app.projects.analyzer.api.routes.os.path.exists",
+            return_value=True,
+        ), patch(
+            "app.projects.analyzer.api.routes.extract_text_from_pdf",
+            return_value=("Resume text", []),
+        ) as extract_text_from_pdf, patch(
+            "app.projects.analyzer.api.routes.evaluate_resume_against_jd",
+            return_value={"percent_match": 75},
+        ), patch(
+            "app.projects.analyzer.api.routes.generate_questions_from_jd",
+            return_value={"questions": [], "summary": ""},
+        ), patch(
+            "app.projects.analyzer.api.routes.extract_experience_section",
+            return_value="",
+        ), patch(
+            "app.projects.analyzer.api.routes.generate_questions_from_experience",
+            return_value={},
+        ), patch(
+            "app.projects.analyzer.api.routes.extract_project_section",
+            return_value="",
+        ), patch(
+            "app.projects.analyzer.api.routes.generate_questions_from_projects",
+            return_value=[],
+        ), patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.get_user_balance",
+            return_value=10,
+        ) as get_user_balance, patch(
+            "app.projects.analyzer.api.routes.credits_pipeline.deduct_credits"
+        ) as deduct_credits:
+            response = self.client.post(
+                "/api/analyzer/forms/form123/analyze",
+                json={
+                    "jd": "Python developer with Flask experience",
+                    "selected_pdfs": ["resume-2.pdf"],
+                },
+                headers=AUTH_HEADERS,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["matches"]), 1)
+        extract_text_from_pdf.assert_called_once_with("/tmp/resume-2.pdf")
+        get_user_balance.assert_called_once_with("user-1")
+        deduct_credits.assert_called_once_with(
+            "user-1",
+            1,
+            note="Analyzer usage: analyzed 1 submission PDF(s) for form form123",
+        )
 
     @patch.dict("os.environ", {"GEMINI_API_KEY_1": "k1"}, clear=False)
     def test_meta_prefers_gemini_when_any_gemini_key_exists(self):

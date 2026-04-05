@@ -40,6 +40,7 @@ def get_form(form_id: str):
     return {
         "id": str(form.get("_id")),
         "form_id": form["form_id"],
+        "user_id": str(form["user_id"]) if form.get("user_id") is not None else None,
         "name": form.get("name"),
         "fields": form.get("fields", []),
         "submissions": [submission.get("data", {}) for submission in submissions],

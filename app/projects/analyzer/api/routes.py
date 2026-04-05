@@ -6,6 +6,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request, render_template, send_file
 
+from app.core.exceptions import AppException, AuthorizationError, InsufficientCreditsError, NotFoundError
 from app.projects.analyzer.api.payloads import CUSTOM_FIELD_TYPES, FIELD_DEFINITIONS
 from app.projects.analyzer.api.templates_config import get_all_templates, get_template_by_name
 from app.projects.analyzer.services import storage
@@ -22,8 +23,11 @@ from app.projects.analyzer.services.match_agent import evaluate_resume_against_j
 from app.projects.analyzer.services.ocr_engine import extract_text_from_pdf
 from app.projects.analyzer.services.utils import get_form_submissions
 from app.core.middleware import auth_required, get_current_user
+from app.projects.lead_gen.credits import pipeline as credits_pipeline
 
 bp = Blueprint("analyzer", __name__, url_prefix="/api/analyzer")
+
+ANALYZER_CREDIT_COST_PER_TARGET = os.getenv("ANALYZER_PRICE",5)
 
 
 @bp.route("", methods=["GET"])
@@ -73,13 +77,18 @@ def serve_form_page(form_id):
 @bp.route("/analyze_pdfs/<form_id>", methods=["GET"])
 @auth_required
 def analyze_pdfs_page(form_id):
-    submissions = storage.get_form_submissions(form_id)
-    pdf_list = []
-    for sub in submissions:
-        for value in sub.values():
-            if isinstance(value, dict) and value.get("name"):
-                pdf_list.append({"name": value["name"], "path": value.get("path", ""), "submission_id": sub.get("id", "")})
-    return render_template("analyzer/analyze_pdfs.html", form_id=form_id, pdfs=pdf_list)
+    try:
+        user = get_current_user()
+        _get_owned_form(form_id, str(user["_id"]))
+        submissions = storage.get_form_submissions(form_id)
+        pdf_list = []
+        for sub in submissions:
+            for value in sub.values():
+                if isinstance(value, dict) and value.get("name"):
+                    pdf_list.append({"name": value["name"], "path": value.get("path", ""), "submission_id": sub.get("id", "")})
+        return render_template("analyzer/analyze_pdfs.html", form_id=form_id, pdfs=pdf_list)
+    except AppException as error:
+        return _json_error_response(error)
 
 
 def _build_fields(selected_fields, custom_fields):
@@ -94,6 +103,60 @@ def _build_fields(selected_fields, custom_fields):
             field["accept"] = custom_field["accept"]
         fields.append(field)
     return fields
+
+
+def _json_error_response(error: AppException):
+    return jsonify({"error": error.message}), error.status_code
+
+
+def _analyzer_credit_amount(target_count: int) -> int:
+    return max(target_count, 0) * ANALYZER_CREDIT_COST_PER_TARGET
+
+
+def _require_analyzer_credits(user_id: str, target_count: int) -> int:
+    required = _analyzer_credit_amount(target_count)
+    if required == 0:
+        return 0
+
+    balance = credits_pipeline.get_user_balance(user_id)
+    if balance < required:
+        raise InsufficientCreditsError(balance, required)
+
+    return required
+
+
+def _deduct_analyzer_credits(user_id: str, amount: int, note: str):
+    if amount <= 0:
+        return None
+    return credits_pipeline.deduct_credits(user_id, amount, note=note)
+
+
+def _iter_submission_pdf_targets(submissions, selected_pdfs=None):
+    selected_pdf_names = set(selected_pdfs or [])
+    for submission in submissions:
+        for field_name, value in submission.get("data", {}).items():
+            if not isinstance(value, dict):
+                continue
+
+            absolute_path = value.get("path", "")
+            if not absolute_path.lower().endswith(".pdf") or not os.path.exists(absolute_path):
+                continue
+
+            pdf_name = value.get("name") or os.path.basename(absolute_path)
+            if selected_pdf_names and pdf_name not in selected_pdf_names:
+                continue
+
+            yield submission, field_name, pdf_name, absolute_path
+
+
+def _get_owned_form(form_id: str, user_id: str):
+    form = storage.get_form(form_id)
+    if not form:
+        raise NotFoundError("Form not found")
+    owner_id = form.get("user_id")
+    if owner_id and owner_id != user_id:
+        raise AuthorizationError("Access denied")
+    return form
 
 
 @bp.route("/meta", methods=["GET"])
@@ -152,55 +215,61 @@ def create_form_record():
 @bp.route("/forms/<form_id>/submissions", methods=["GET"])
 @auth_required
 def form_submissions(form_id):
-    return jsonify({"submissions": storage.get_form_submissions(form_id)})
+    try:
+        user = get_current_user()
+        _get_owned_form(form_id, str(user["_id"]))
+        return jsonify({"submissions": storage.get_form_submissions(form_id)})
+    except AppException as error:
+        return _json_error_response(error)
 
 
 @bp.route("/forms/<form_id>/submissions", methods=["POST"])
 @auth_required
 def create_submission_record(form_id):
-    form = storage.get_form(form_id)
-    if not form:
-        return jsonify({"error": "Form not found"}), 404
+    try:
+        user = get_current_user()
+        form = _get_owned_form(form_id, str(user["_id"]))
 
-    submission = {}
-    for field in form["fields"]:
-        field_name = field["name"]
-        field_type = field.get("data_type", "text")
-        if field_type == "file":
-            upload = request.files.get(field_name)
-            if upload and upload.filename:
-                submission[field_name] = storage.save_upload(upload, f"form-{form_id}")
+        submission = {}
+        for field in form["fields"]:
+            field_name = field["name"]
+            field_type = field.get("data_type", "text")
+            if field_type == "file":
+                upload = request.files.get(field_name)
+                if upload and upload.filename:
+                    submission[field_name] = storage.save_upload(upload, f"form-{form_id}")
+                else:
+                    submission[field_name] = ""
             else:
-                submission[field_name] = ""
-        else:
-            submission[field_name] = request.form.get(field_name, "")
-    created = storage.add_submission(form_id, submission)
-    return jsonify({"submission": {"id": str(created["_id"]), "form_id": form_id, "data": created["data"]}}), 201
+                submission[field_name] = request.form.get(field_name, "")
+        created = storage.add_submission(form_id, submission)
+        return jsonify({"submission": {"id": str(created["_id"]), "form_id": form_id, "data": created["data"]}}), 201
+    except AppException as error:
+        return _json_error_response(error)
 
 
 @bp.route("/forms/<form_id>/analyze", methods=["POST"])
 @auth_required
 def analyze_form_submissions_with_id(form_id):
-    payload = request.get_json() or {}
-    job_description = payload.get("jd", "")
-    submission_ids = payload.get("submission_ids", [])
-    selected_pdfs = set(payload.get("selected_pdfs", []))
-    submissions = storage.get_submission_documents(form_id, submission_ids=submission_ids)
-    if not submissions:
-        return jsonify({"matches": []}), 200
+    try:
+        user = get_current_user()
+        _get_owned_form(form_id, str(user["_id"]))
+        payload = request.get_json() or {}
+        job_description = payload.get("jd", "")
+        submission_ids = payload.get("submission_ids", [])
+        selected_pdfs = set(payload.get("selected_pdfs", []))
+        submissions = storage.get_submission_documents(form_id, submission_ids=submission_ids)
+        if not submissions:
+            return jsonify({"matches": []}), 200
 
-    results = []
-    for submission in submissions:
-        for field_name, value in submission.get("data", {}).items():
-            if not isinstance(value, dict):
-                continue
-            absolute_path = value.get("path", "")
-            if not absolute_path.lower().endswith(".pdf") or not os.path.exists(absolute_path):
-                continue
-            pdf_name = value.get("name") or os.path.basename(absolute_path)
-            if selected_pdfs and pdf_name not in selected_pdfs:
-                continue
+        pdf_targets = list(_iter_submission_pdf_targets(submissions, selected_pdfs))
+        if not pdf_targets:
+            return jsonify({"matches": []}), 200
 
+        credits_required = _require_analyzer_credits(str(user["_id"]), len(pdf_targets))
+
+        results = []
+        for submission, field_name, pdf_name, absolute_path in pdf_targets:
             resume_text, links = extract_text_from_pdf(absolute_path)
             match_report = evaluate_resume_against_jd(job_description, resume_text)
             github_questions = []
@@ -263,7 +332,15 @@ def analyze_form_submissions_with_id(form_id):
                     "links": links,
                 }
             )
-    return jsonify({"matches": results})
+
+        _deduct_analyzer_credits(
+            str(user["_id"]),
+            credits_required,
+            note=f"Analyzer usage: analyzed {len(pdf_targets)} submission PDF(s) for form {form_id}",
+        )
+        return jsonify({"matches": results})
+    except AppException as error:
+        return _json_error_response(error)
 
 
 @bp.route("/v1/template_fields/<name>", methods=["GET"])
@@ -342,65 +419,78 @@ def submit_form(form_id):
 @auth_required
 def download_excel(form_id):
     try:
+        user = get_current_user()
+        _get_owned_form(form_id, str(user["_id"]))
         file_path = storage.export_to_excel(form_id)
     except FileNotFoundError:
         return jsonify({"error": "No data found."}), 404
+    except AppException as error:
+        return _json_error_response(error)
     return send_file(file_path, as_attachment=True, download_name=f"{form_id}_data.xlsx")
 
 
 @bp.route("/v1/match_from_pdfs", methods=["POST"])
 @auth_required
 def match_from_pdfs():
-    jd = request.form.get("jd", "")
-    pdf_files = request.files.getlist("pdf_files")
-    if not pdf_files:
-        return jsonify({"error": "At least one PDF is required"}), 400
+    try:
+        user = get_current_user()
+        jd = request.form.get("jd", "")
+        pdf_files = [pdf for pdf in request.files.getlist("pdf_files") if getattr(pdf, "filename", "")]
+        if not pdf_files:
+            return jsonify({"error": "At least one PDF is required"}), 400
 
-    temp_dir = tempfile.mkdtemp()
-    results = process_uploaded_pdfs(pdf_files, jd, temp_dir)
-    normalized = []
-    for item in results:
-        normalized.append(
-            {
-                "file_name": item["pdf_path"],
-                "pdf_path": item["pdf_path"],
-                "match_report": item["match_report"],
-                "question_sets": item["github_questions"],
-                "github_questions": item["github_questions"],
-                "links": item["links"],
-                "resume_text": item.get("resume_text", ""),
-            }
+        credits_required = _require_analyzer_credits(str(user["_id"]), len(pdf_files))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results = process_uploaded_pdfs(pdf_files, jd, temp_dir)
+
+        _deduct_analyzer_credits(
+            str(user["_id"]),
+            credits_required,
+            note=f"Analyzer usage: matched {len(pdf_files)} uploaded PDF(s)",
         )
-    return jsonify({"matches": normalized})
+
+        normalized = []
+        for item in results:
+            normalized.append(
+                {
+                    "file_name": item["pdf_path"],
+                    "pdf_path": item["pdf_path"],
+                    "match_report": item["match_report"],
+                    "question_sets": item["github_questions"],
+                    "github_questions": item["github_questions"],
+                    "links": item["links"],
+                    "resume_text": item.get("resume_text", ""),
+                }
+            )
+        return jsonify({"matches": normalized})
+    except AppException as error:
+        return _json_error_response(error)
 
 
 @bp.route("/v1/analyze_from_excel/<form_id>", methods=["POST"])
 @auth_required
 def analyze_from_excel(form_id):
-    submissions = get_form_submissions(form_id)
-    if not submissions:
-        return jsonify({"error": "No submissions found."}), 404
-
-    jd = request.form.get("jd", "")
-    selected_pdfs = request.form.get("selected_pdfs", "[]")
     try:
-        selected_pdf_list = json.loads(selected_pdfs) if selected_pdfs else []
-    except json.JSONDecodeError:
-        selected_pdf_list = []
+        user = get_current_user()
+        _get_owned_form(form_id, str(user["_id"]))
+        submissions = get_form_submissions(form_id)
+        if not submissions:
+            return jsonify({"error": "No submissions found."}), 404
 
-    submission_docs = storage.get_submission_documents(form_id)
-    results = []
-    for submission in submission_docs:
-        for field_name, value in submission.get("data", {}).items():
-            if not isinstance(value, dict):
-                continue
-            absolute_path = value.get("path", "")
-            if not absolute_path or not os.path.exists(absolute_path):
-                continue
-            pdf_name = value.get("name", os.path.basename(absolute_path))
-            if selected_pdf_list and pdf_name not in selected_pdf_list:
-                continue
+        jd = request.form.get("jd", "")
+        selected_pdfs = request.form.get("selected_pdfs", "[]")
+        try:
+            selected_pdf_list = json.loads(selected_pdfs) if selected_pdfs else []
+        except json.JSONDecodeError:
+            selected_pdf_list = []
 
+        submission_docs = storage.get_submission_documents(form_id)
+        pdf_targets = list(_iter_submission_pdf_targets(submission_docs, selected_pdf_list))
+        credits_required = _require_analyzer_credits(str(user["_id"]), len(pdf_targets))
+
+        results = []
+        for submission, field_name, pdf_name, absolute_path in pdf_targets:
             resume_text, links = extract_text_from_pdf(absolute_path)
             match_report = evaluate_resume_against_jd(jd, resume_text)
             github_questions = []
@@ -468,14 +558,32 @@ def analyze_from_excel(form_id):
                     "links": links,
                 }
             )
-    return jsonify(results)
+
+        _deduct_analyzer_credits(
+            str(user["_id"]),
+            credits_required,
+            note=f"Analyzer usage: analyzed {len(pdf_targets)} Excel-selected PDF(s) for form {form_id}",
+        )
+        return jsonify(results)
+    except AppException as error:
+        return _json_error_response(error)
 
 
 @bp.route("/v1/github_questions", methods=["POST"])
 @auth_required
 def github_questions():
-    data = request.get_json() or {}
-    github_urls = data.get("github_urls", [])
-    num_questions = int(data.get("num_questions", 10))
-    result = generate_questions_from_github(github_urls, num_questions)
-    return jsonify(result)
+    try:
+        user = get_current_user()
+        data = request.get_json() or {}
+        github_urls = data.get("github_urls", [])
+        num_questions = int(data.get("num_questions", 10))
+        credits_required = _require_analyzer_credits(str(user["_id"]), len(github_urls))
+        result = generate_questions_from_github(github_urls, num_questions)
+        _deduct_analyzer_credits(
+            str(user["_id"]),
+            credits_required,
+            note=f"Analyzer usage: generated questions for {len(github_urls)} GitHub URL(s)",
+        )
+        return jsonify(result)
+    except AppException as error:
+        return _json_error_response(error)

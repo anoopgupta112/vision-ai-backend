@@ -66,5 +66,5 @@ def get_history(user_id, limit=50, skip=0):
 def add(user_id, amount, reason=REASON_ADMIN, note=None):
     return create(user_id, amount, reason, note)
 
-def deduct(user_id, amount, job_id=None):
-    return create(user_id, -abs(amount), REASON_USAGE, job_id=job_id)
+def deduct(user_id, amount, job_id=None, note=None):
+    return create(user_id, -abs(amount), REASON_USAGE, note=note, job_id=job_id)
