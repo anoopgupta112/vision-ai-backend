@@ -1,26 +1,4 @@
 services:
-  mongodb:
-    image: mongo:7
-    container_name: platform_mongodb
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
-    volumes:
-      - mongodb_data:/data/db
-    # Port removed - only accessible within Docker network
-    # If you need to access MongoDB from host, uncomment:
-    ports:
-      - "127.0.0.1:27017:27017"
-    command: ["mongod", "--quiet", "--logpath", "/dev/null"]
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - platform_network
-
   redis:
     image: redis:7-alpine
     container_name: platform_redis
@@ -41,7 +19,7 @@ services:
     restart: unless-stopped
     environment:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@platform_mongodb:27017/?authSource=admin
       - MONGODB_DATABASE=${MONGODB_DATABASE:-platform_db}
       - REDIS_URL=redis://redis:6379/0
       - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
@@ -56,8 +34,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -67,6 +43,7 @@ services:
       retries: 3
     networks:
       - platform_network
+      - shared_db_network
 
   worker:
     build: .
@@ -75,7 +52,7 @@ services:
     command: python worker.py
     environment:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@platform_mongodb:27017/?authSource=admin
       - MONGODB_DATABASE=${MONGODB_DATABASE:-platform_db}
       - REDIS_URL=redis://redis:6379/0
       - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
@@ -86,17 +63,17 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Lead Gen Platform}
     depends_on:
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - platform_network
+      - shared_db_network
 
 volumes:
-  mongodb_data:
   redis_data:
 
 networks:
   platform_network:
     driver: bridge
+  shared_db_network:
+    external: true
