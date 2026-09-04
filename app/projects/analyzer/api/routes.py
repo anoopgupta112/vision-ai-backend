@@ -19,6 +19,10 @@ from app.projects.analyzer.services.github_agent import (
     generate_questions_from_jd,
     generate_questions_from_projects,
 )
+from app.projects.analyzer.services.analysis_graph import (
+    run_batch_candidate_analysis,
+    run_candidate_analysis,
+)
 from app.projects.analyzer.services.github_questions import process_uploaded_pdfs
 from app.projects.analyzer.services.match_agent import evaluate_resume_against_jd
 from app.projects.analyzer.services.ocr_engine import extract_text_from_pdf
@@ -310,43 +314,7 @@ def analyze_form_submissions_with_id(form_id):
 
         credits_required = _require_analyzer_credits(str(user["_id"]), len(pdf_targets))
 
-        results = []
-        for submission, field_name, pdf_name, drive_file_id, absolute_path in pdf_targets:
-            if drive_file_id:
-                try:
-                    from app.projects.analyzer.services import google_drive
-                    pdf_bytes = google_drive.download_file_bytes(drive_file_id)
-                    resume_text, links = extract_text_from_pdf(pdf_bytes)
-                except Exception as exc:
-                    logger.error("Failed downloading PDF %s from Google Drive: %s", drive_file_id, exc)
-                    resume_text, links = "", []
-            else:
-                resume_text, links = extract_text_from_pdf(absolute_path)
-
-            from app.projects.analyzer.services.analysis_graph import analysis_graph
-            graph_out = analysis_graph.invoke({
-                "pdf_path": pdf_name,
-                "file_name": pdf_name,
-                "jd": job_description,
-                "resume_text": resume_text or "",
-                "links": links or [],
-                "match_report": None,
-                "question_sets": [],
-                "errors": [],
-            })
-            match_report = graph_out.get("match_report") or evaluate_resume_against_jd(job_description, resume_text)
-            question_sets = graph_out.get("question_sets", [])
-            github_questions = [q for q in question_sets if q.get("source") == "github"] or question_sets
-            results.append({
-                "file_name": pdf_name,
-                "pdf_path": pdf_name,
-                "submission_id": str(submission["_id"]),
-                "field_name": field_name,
-                "match_report": match_report,
-                "question_sets": question_sets,
-                "github_questions": github_questions,
-                "links": links,
-            })
+        results = run_batch_candidate_analysis(pdf_targets, job_description)
 
         _deduct_analyzer_credits(
             str(user["_id"]),

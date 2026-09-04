@@ -87,7 +87,7 @@ def _candidate_models(requested_model: Optional[str]) -> List[str]:
 
 
 def should_retry_groq_error(error_text: str) -> bool:
-    return any(marker in error_text for marker in ("429", "rate_limit_exceeded", "503", "500", "overloaded"))
+    return any(marker in error_text.lower() for marker in ("429", "rate_limit", "503", "500", "502", "overloaded", "quota", "400", "bad_request"))
 
 
 def complete_chat(
@@ -123,7 +123,7 @@ def complete_chat(
                 "temperature": temperature,
                 "max_tokens": max_tokens_val,
             }
-            if "Respond ONLY with a JSON object" in prompt or "Return ONLY a valid JSON object" in prompt or "JSON" in prompt:
+            if "Respond ONLY with a JSON object" in prompt or "Return ONLY a valid JSON object" in prompt:
                 payload["response_format"] = {"type": "json_object"}
 
             try:
@@ -142,11 +142,25 @@ def complete_chat(
                             _save_key_index((current_index + 1) % len(api_keys))
                             return content
                     errors.append(f"{model_name} [Key #{current_index+1}]: Empty choices")
+                elif response.status_code == 400 and "response_format" in payload:
+                    # Retry without response_format if json_object mode caused a 400
+                    payload.pop("response_format", None)
+                    retry_resp = requests.post(base_url, headers=headers, json=payload, timeout=60)
+                    if retry_resp.status_code == 200:
+                        data = retry_resp.json()
+                        choices = data.get("choices") or []
+                        if choices:
+                            content = choices[0].get("message", {}).get("content", "")
+                            if content:
+                                _save_key_index((current_index + 1) % len(api_keys))
+                                return content
+                    err_body = retry_resp.text[:200]
+                    errors.append(f"{model_name} [Key #{current_index+1}] (HTTP {retry_resp.status_code}): {err_body}")
                 else:
                     err_body = response.text[:200]
                     errors.append(f"{model_name} [Key #{current_index+1}] (HTTP {response.status_code}): {err_body}")
                     if should_retry_groq_error(err_body):
-                        logger.warning("Groq Key #%s rate-limited (%s). Trying next key/model...", current_index+1, response.status_code)
+                        logger.warning("Groq Key #%s error (%s). Trying next key/model...", current_index+1, response.status_code)
                         continue
             except Exception as exc:
                 errors.append(f"{model_name} [Key #{current_index+1}]: {str(exc)}")

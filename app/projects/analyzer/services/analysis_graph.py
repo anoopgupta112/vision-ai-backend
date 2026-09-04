@@ -93,45 +93,42 @@ def node_evaluate_fit(state: CandidateGraphState) -> Dict[str, Any]:
         }
 
 
-# Conditional Router
-def route_technical_deep_dive(state: CandidateGraphState) -> str:
-    links = state.get("links", [])
-    github_links = [item["uri"] for item in links if isinstance(item, dict) and "uri" in item]
-    has_github_repo = any(re.match(r"https://github.com/[^/]+/[^/]+", url) for url in github_links)
-
-    if has_github_repo:
-        return "analyze_github"
-    return "analyze_jd_fallback"
-
-
-# Node 3A: GitHub Repository Question Generator
+# Node 3A: GitHub Question Generator (Supports repo and user profile links)
 def node_analyze_github(state: CandidateGraphState) -> Dict[str, Any]:
     links = state.get("links", [])
-    github_links = [item["uri"] for item in links if isinstance(item, dict) and "uri" in item]
-    repo_links = [url for url in set(github_links) if re.match(r"https://github.com/[^/]+/[^/]+", url)]
+    github_links = []
+    for item in links:
+        if isinstance(item, dict) and "uri" in item:
+            url = item["uri"]
+            if "github.com/" in url:
+                github_links.append(url)
 
     qsets = []
-    for repo_url in sorted(repo_links):
+    seen = set()
+    for gh_url in sorted(set(github_links)):
+        if gh_url in seen:
+            continue
+        seen.add(gh_url)
         try:
-            qdata = generate_questions_from_github([repo_url], 10)
-            if qdata.get("summary") == "No code found.":
+            qdata = generate_questions_from_github([gh_url], 10)
+            if qdata.get("summary") == "No code found." or not qdata.get("questions"):
                 continue
             qsets.append(
                 {
-                    "repo": repo_url,
+                    "repo": gh_url,
                     "questions": qdata.get("questions", []),
                     "summary": qdata.get("summary", ""),
                     "source": "github",
                 }
             )
         except Exception as exc:
-            logger.warning("Failed analyzing GitHub repo %s: %s", repo_url, exc)
+            logger.warning("Failed analyzing GitHub URL %s: %s", gh_url, exc)
 
     return {"question_sets": qsets}
 
 
-# Node 3B: Job Description Fallback Question Generator
-def node_analyze_jd_fallback(state: CandidateGraphState) -> Dict[str, Any]:
+# Node 3B: Job Description Question Generator
+def node_analyze_jd(state: CandidateGraphState) -> Dict[str, Any]:
     jd = state.get("jd", "")
     qsets = []
     if jd.strip():
@@ -158,9 +155,11 @@ def node_analyze_experience_projects(state: CandidateGraphState) -> Dict[str, An
     qsets = []
 
     if resume_text:
-        # Experience questions
+        # 1. Experience questions (with fallback to full resume text)
         try:
             experience_text = extract_experience_section(resume_text)
+            if not experience_text or len(experience_text.strip()) < 40:
+                experience_text = resume_text
             exp_qdata = generate_questions_from_experience(experience_text, 5)
             if exp_qdata.get("questions"):
                 qsets.append(
@@ -174,10 +173,16 @@ def node_analyze_experience_projects(state: CandidateGraphState) -> Dict[str, An
         except Exception as exc:
             logger.warning("Failed generating experience questions: %s", exc)
 
-        # Projects questions
+        # 2. Projects questions (with fallback to full resume text)
         try:
             project_text = extract_project_section(resume_text)
-            for project in generate_questions_from_projects(project_text):
+            if not project_text or len(project_text.strip()) < 40:
+                project_text = resume_text
+            projects = generate_questions_from_projects(project_text)
+            if not projects and project_text != resume_text:
+                projects = generate_questions_from_projects(resume_text)
+
+            for project in projects:
                 qsets.append(
                     {
                         "repo": project.get("project_name", "Project"),
@@ -205,7 +210,7 @@ def create_candidate_analysis_graph():
     workflow.add_node("extract_pdf", node_extract_pdf)
     workflow.add_node("evaluate_fit", node_evaluate_fit)
     workflow.add_node("analyze_github", node_analyze_github)
-    workflow.add_node("analyze_jd_fallback", node_analyze_jd_fallback)
+    workflow.add_node("analyze_jd", node_analyze_jd)
     workflow.add_node("analyze_experience_projects", node_analyze_experience_projects)
     workflow.add_node("synthesize", node_synthesize)
 
@@ -213,20 +218,14 @@ def create_candidate_analysis_graph():
     workflow.add_edge(START, "extract_pdf")
     workflow.add_edge("extract_pdf", "evaluate_fit")
 
-    # From evaluate_fit: conditional router for GitHub vs JD + parallel fan-out to experience/projects
-    workflow.add_conditional_edges(
-        "evaluate_fit",
-        route_technical_deep_dive,
-        {
-            "analyze_github": "analyze_github",
-            "analyze_jd_fallback": "analyze_jd_fallback",
-        },
-    )
+    # From evaluate_fit: Fan out in parallel to all question generators
+    workflow.add_edge("evaluate_fit", "analyze_github")
+    workflow.add_edge("evaluate_fit", "analyze_jd")
     workflow.add_edge("evaluate_fit", "analyze_experience_projects")
 
     # Fan-in to synthesize
     workflow.add_edge("analyze_github", "synthesize")
-    workflow.add_edge("analyze_jd_fallback", "synthesize")
+    workflow.add_edge("analyze_jd", "synthesize")
     workflow.add_edge("analyze_experience_projects", "synthesize")
     workflow.add_edge("synthesize", END)
 

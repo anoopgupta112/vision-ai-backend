@@ -48,4 +48,17 @@ def extract_text_from_pdf(pdf_source: Union[str, bytes]) -> Tuple[str, List[Dict
                 if "uri" in link_copy:
                     links_data.append(link_copy)
 
+    # Also detect plain-text GitHub and web URLs in resume text
+    import re
+    text_urls = re.findall(r"https?://[^\s)\]>]+", text)
+    github_text = re.findall(r"(?:^|[\s(])(github\.com/[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-]+)?)", text)
+    for u in text_urls:
+        clean_u = u.rstrip(".,;)>]")
+        if not any(item.get("uri") == clean_u for item in links_data):
+            links_data.append({"uri": clean_u})
+    for g in github_text:
+        full_g = f"https://{g.strip().rstrip('.,;)>]')}"
+        if not any(item.get("uri") == full_g for item in links_data):
+            links_data.append({"uri": full_g})
+
     return text, links_data

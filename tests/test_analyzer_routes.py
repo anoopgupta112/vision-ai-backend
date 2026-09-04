@@ -288,27 +288,9 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
             "app.projects.analyzer.api.routes.os.path.exists",
             return_value=True,
         ), patch(
-            "app.projects.analyzer.api.routes.extract_text_from_pdf",
-            return_value=("Resume text", []),
-        ) as extract_text_from_pdf, patch(
-            "app.projects.analyzer.api.routes.evaluate_resume_against_jd",
-            return_value={"percent_match": 75},
-        ), patch(
-            "app.projects.analyzer.api.routes.generate_questions_from_jd",
-            return_value={"questions": [], "summary": ""},
-        ), patch(
-            "app.projects.analyzer.api.routes.extract_experience_section",
-            return_value="",
-        ), patch(
-            "app.projects.analyzer.api.routes.generate_questions_from_experience",
-            return_value={},
-        ), patch(
-            "app.projects.analyzer.api.routes.extract_project_section",
-            return_value="",
-        ), patch(
-            "app.projects.analyzer.api.routes.generate_questions_from_projects",
-            return_value=[],
-        ), patch(
+            "app.projects.analyzer.api.routes.run_batch_candidate_analysis",
+            return_value=[{"file_name": "resume-2.pdf", "match_report": {"percent_match": 75}}],
+        ) as mock_batch_analysis, patch(
             "app.projects.analyzer.api.routes.credits_pipeline.get_user_balance",
             return_value=10,
         ) as get_user_balance, patch(
@@ -325,7 +307,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["matches"]), 1)
-        extract_text_from_pdf.assert_called_once_with("/tmp/resume-2.pdf")
+        mock_batch_analysis.assert_called_once()
         get_user_balance.assert_called_once_with("user-1")
         deduct_credits.assert_called_once_with(
             "user-1",

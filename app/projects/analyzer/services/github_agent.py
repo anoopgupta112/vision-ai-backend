@@ -17,12 +17,67 @@ def _complete_prompt(prompt: str) -> str:
         raise ValueError(f"AI client request failed: {exc}") from exc
 
 
+def get_github_user_repos(username: str, max_repos: int = 5) -> List[Dict[str, str]]:
+    """Fetches public, non-fork repositories for a GitHub user."""
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    try:
+        github_token = current_app.config.get("GITHUB_TOKEN")
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+    except Exception:
+        pass
+
+    try:
+        resp = requests.get(
+            f"{GITHUB_API}/users/{username}/repos?sort=pushed&per_page=10",
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            repos_data = resp.json()
+            if isinstance(repos_data, list):
+                valid_repos = []
+                for r in repos_data:
+                    # Prefer non-forks, but include forks if few
+                    name = r.get("name")
+                    full_name = r.get("full_name") or f"{username}/{name}"
+                    html_url = r.get("html_url") or f"https://github.com/{full_name}"
+                    is_fork = bool(r.get("fork"))
+                    if name and not name.startswith("."):
+                        valid_repos.append({
+                            "name": name,
+                            "full_name": full_name,
+                            "url": html_url,
+                            "fork": is_fork,
+                        })
+                # Sort non-forks first
+                valid_repos.sort(key=lambda x: (x["fork"], x["name"]))
+                return valid_repos[:max_repos]
+    except Exception:
+        pass
+    return []
+
+
 def fetch_github_code(url: str, max_lines: int = 300) -> str:
-    match = re.search(r"github\.com/([^/]+)/([^/]+)", url.strip())
-    if not match:
+    url_clean = url.strip().rstrip("/")
+    # Check if this is a user profile URL (e.g. github.com/username) vs repo URL (e.g. github.com/owner/repo)
+    repo_match = re.search(r"github\.com/([^/]+)/([^/]+)", url_clean)
+    if not repo_match:
+        profile_match = re.search(r"github\.com/([^/]+)$", url_clean)
+        if profile_match:
+            username = profile_match.group(1)
+            # Exclude non-user paths
+            if username.lower() not in {"topics", "features", "pricing", "about", "explore", "trending", "collections", "events", "sponsors", "login", "signup"}:
+                repos = get_github_user_repos(username, max_repos=3)
+                all_repo_code = []
+                for r in repos:
+                    code = fetch_github_code(r["url"], max_lines=150)
+                    if code:
+                        all_repo_code.append(f"### Repository: {r['full_name']}\n{code}")
+                return "\n\n".join(all_repo_code)
         return ""
 
-    owner, repo = match.group(1), match.group(2).rstrip("/")
+    owner, repo = repo_match.group(1), repo_match.group(2).rstrip("/")
     if repo.endswith(".git"):
         repo = repo[:-4]
 
@@ -248,10 +303,11 @@ Identify each distinct project. For each project:
 2. Write a short summary of the project.
 3. Generate 3-5 basic, easy-to-answer technical questions specific to that project.
 
-Respond ONLY with a JSON array of objects, where each object has:
-- project_name: string
-- summary: string
-- questions: array of strings
+Respond ONLY with a JSON object with keys:
+- projects: array of objects where each object has:
+    - project_name: string
+    - summary: string
+    - questions: array of strings
 
 ---
 Projects Section:
@@ -260,24 +316,22 @@ Projects Section:
 """
     response_text = _complete_prompt(prompt)
     try:
-        array_match = re.search(r"\[[\s\S]*\]", response_text)
-        if array_match:
-            parsed = json.loads(array_match.group(0))
-            if isinstance(parsed, list):
-                valid_items = []
-                for item in parsed:
-                    if isinstance(item, dict):
-                        valid_items.append(item)
-                if valid_items:
-                    return valid_items
-
-        obj_match = re.search(r"\{[\s\S]*\}", response_text)
-        if obj_match:
-            parsed = json.loads(obj_match.group(0))
-            if isinstance(parsed, dict):
-                projects = parsed.get("projects") or parsed.get("project_list") or [parsed]
-                if isinstance(projects, list):
-                    return [p for p in projects if isinstance(p, dict)]
+        json_str = re.search(r"\{[\s\S]*\}", response_text).group(0)
+        data = json.loads(json_str)
+        if isinstance(data, dict):
+            projects = data.get("projects") or data.get("project_list") or []
+            if isinstance(projects, list):
+                return [p for p in projects if isinstance(p, dict)]
         return []
     except Exception:
+        # Fallback to array search if model outputted a raw array
+        try:
+            array_match = re.search(r"\[[\s\S]*\]", response_text)
+            if array_match:
+                parsed = json.loads(array_match.group(0))
+                if isinstance(parsed, list):
+                    return [p for p in parsed if isinstance(p, dict)]
+        except Exception:
+            pass
         return []
+
