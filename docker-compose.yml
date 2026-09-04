@@ -17,6 +17,8 @@ services:
     build: .
     container_name: platform_api
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@platform_mongodb:27017/?authSource=admin
@@ -50,6 +52,8 @@ services:
     container_name: platform_worker
     restart: unless-stopped
     command: python worker.py
+    env_file:
+      - .env
     environment:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@platform_mongodb:27017/?authSource=admin
