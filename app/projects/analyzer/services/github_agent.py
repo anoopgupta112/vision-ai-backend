@@ -58,7 +58,7 @@ def get_github_user_repos(username: str, max_repos: int = 5) -> List[Dict[str, s
     return []
 
 
-def fetch_github_code(url: str, max_lines: int = 300) -> str:
+def fetch_github_code(url: str, max_lines: int = 150) -> str:
     url_clean = url.strip().rstrip("/")
     # Check if this is a user profile URL (e.g. github.com/username) vs repo URL (e.g. github.com/owner/repo)
     repo_match = re.search(r"github\.com/([^/]+)/([^/]+)", url_clean)
@@ -68,10 +68,10 @@ def fetch_github_code(url: str, max_lines: int = 300) -> str:
             username = profile_match.group(1)
             # Exclude non-user paths
             if username.lower() not in {"topics", "features", "pricing", "about", "explore", "trending", "collections", "events", "sponsors", "login", "signup"}:
-                repos = get_github_user_repos(username, max_repos=3)
+                repos = get_github_user_repos(username, max_repos=2)
                 all_repo_code = []
                 for r in repos:
-                    code = fetch_github_code(r["url"], max_lines=150)
+                    code = fetch_github_code(r["url"], max_lines=60)
                     if code:
                         all_repo_code.append(f"### Repository: {r['full_name']}\n{code}")
                 return "\n\n".join(all_repo_code)

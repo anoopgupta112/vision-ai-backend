@@ -26,30 +26,17 @@ def complete_chat(
     if _get_config("GROQ_API_KEY"):
         try:
             from app.clients import groq_client
-
             return groq_client.complete_chat(prompt, model, temperature, max_tokens)
         except Exception as exc:
-            if not (_get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1") or _get_config("OPENROUTER_API_KEY")):
-                raise AIClientError(f"Groq client error: {exc}") from exc
+            raise AIClientError(f"Groq client error: {exc}") from exc
 
     # 2. Fallback: Gemini
     if _get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1"):
         try:
             from app.clients import gemini_client
-
             return gemini_client.complete_chat(prompt, model, temperature, max_tokens)
         except Exception as exc:
-            if not _get_config("OPENROUTER_API_KEY"):
-                raise AIClientError(f"Gemini client error: {exc}") from exc
-
-    # 3. Fallback: OpenRouter
-    if _get_config("OPENROUTER_API_KEY"):
-        try:
-            from app.clients import openrouter_client
-
-            return openrouter_client.complete_chat(prompt, model, temperature, max_tokens)
-        except Exception as exc:
-            raise AIClientError(f"OpenRouter client error: {exc}") from exc
+            raise AIClientError(f"Gemini client error: {exc}") from exc
 
     raise AIClientError("No active AI provider configured (GROQ_API_KEY is required).")
 
