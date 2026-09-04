@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 class CandidateGraphState(TypedDict):
     pdf_path: str
     file_name: str
+    drive_file_id: Optional[str]
     jd: str
     resume_text: str
     links: List[Dict[str, Any]]
@@ -37,13 +38,22 @@ class CandidateGraphState(TypedDict):
     errors: Annotated[List[str], operator.add]
 
 
-# Node 1: PDF Extraction
+# Node 1: PDF Extraction (Supports Google Drive in-memory bytes and local files)
 def node_extract_pdf(state: CandidateGraphState) -> Dict[str, Any]:
     if state.get("resume_text"):
         return {}
+    drive_file_id = state.get("drive_file_id")
     pdf_path = state.get("pdf_path", "")
     try:
-        if pdf_path and os.path.exists(pdf_path):
+        if drive_file_id:
+            from app.projects.analyzer.services import google_drive
+            pdf_bytes = google_drive.download_file_bytes(drive_file_id)
+            resume_text, links = extract_text_from_pdf(pdf_bytes)
+            return {
+                "resume_text": resume_text or "",
+                "links": links or [],
+            }
+        elif pdf_path and os.path.exists(pdf_path):
             resume_text, links = extract_text_from_pdf(pdf_path)
             return {
                 "resume_text": resume_text or "",
@@ -55,7 +65,7 @@ def node_extract_pdf(state: CandidateGraphState) -> Dict[str, Any]:
                 "links": [],
             }
     except Exception as exc:
-        logger.error("Failed to extract PDF %s: %s", pdf_path, exc)
+        logger.error("Failed to extract PDF (drive_id=%s, path=%s): %s", drive_file_id, pdf_path, exc)
         return {
             "resume_text": "",
             "links": [],
@@ -227,11 +237,17 @@ def create_candidate_analysis_graph():
 analysis_graph = create_candidate_analysis_graph()
 
 
-def run_candidate_analysis(pdf_path: str, jd: str, file_name: Optional[str] = None) -> Dict[str, Any]:
+def run_candidate_analysis(
+    pdf_path: str = "",
+    jd: str = "",
+    file_name: Optional[str] = None,
+    drive_file_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Runs the LangGraph candidate analysis pipeline on a single resume PDF."""
     initial_state: CandidateGraphState = {
-        "pdf_path": pdf_path,
-        "file_name": file_name or os.path.basename(pdf_path),
+        "pdf_path": pdf_path or "",
+        "file_name": file_name or (os.path.basename(pdf_path) if pdf_path else "resume.pdf"),
+        "drive_file_id": drive_file_id,
         "jd": jd,
         "resume_text": "",
         "links": [],
@@ -278,9 +294,20 @@ def run_batch_candidate_analysis(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index = {}
         for idx, target in enumerate(pdf_targets):
-            # target is (submission, field_name, pdf_name, absolute_path)
-            submission, field_name, pdf_name, absolute_path = target
-            future = executor.submit(run_candidate_analysis, absolute_path, jd, pdf_name)
+            # target is (submission, field_name, pdf_name, drive_file_id, absolute_path)
+            if len(target) == 5:
+                submission, field_name, pdf_name, drive_file_id, absolute_path = target
+            else:
+                submission, field_name, pdf_name, absolute_path = target
+                drive_file_id = None
+
+            future = executor.submit(
+                run_candidate_analysis,
+                pdf_path=absolute_path,
+                jd=jd,
+                file_name=pdf_name,
+                drive_file_id=drive_file_id,
+            )
             future_to_index[future] = (idx, submission, field_name, pdf_name)
 
         for future in as_completed(future_to_index):
