@@ -38,8 +38,8 @@ def _candidate_models(requested_model: Optional[str]) -> List[str]:
     for model_name in [
         configured,
         "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
     ]:
         if model_name and model_name not in models:
             models.append(model_name)
