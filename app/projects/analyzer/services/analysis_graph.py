@@ -299,12 +299,15 @@ def _run_single_candidate(app_obj, pdf_path, jd, file_name, drive_file_id):
 def run_batch_candidate_analysis(
     pdf_targets: List[tuple],
     jd: str,
-    max_workers: int = 4,
+    max_workers: int = 2,
 ) -> List[Dict[str, Any]]:
     """
-    Executes LangGraph analysis across multiple candidate resumes in parallel
-    using a safe ThreadPoolExecutor.
+    Executes LangGraph analysis across multiple candidate resumes using controlled
+    concurrency and per-submission caching to avoid rate-limit exhaustion.
     """
+    import time
+    from app.projects.analyzer.services import storage
+
     results = [None] * len(pdf_targets)
     app_obj = None
     try:
@@ -314,7 +317,8 @@ def run_batch_candidate_analysis(
     except Exception:
         pass
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    # Process sequentially or in gentle concurrency of max 2 workers
+    with ThreadPoolExecutor(max_workers=min(max_workers, 2)) as executor:
         future_to_index = {}
         for idx, target in enumerate(pdf_targets):
             # target is (submission, field_name, pdf_name, drive_file_id, absolute_path)
@@ -323,6 +327,19 @@ def run_batch_candidate_analysis(
             else:
                 submission, field_name, pdf_name, absolute_path = target
                 drive_file_id = None
+
+            sub_id = str(submission.get("_id", "")) if isinstance(submission, dict) else ""
+
+            # Check cache first
+            if sub_id:
+                cached = storage.get_cached_submission_analysis(sub_id, jd)
+                if cached:
+                    cached_copy = dict(cached)
+                    cached_copy["submission_id"] = sub_id
+                    cached_copy["field_name"] = field_name
+                    cached_copy["file_name"] = pdf_name
+                    results[idx] = cached_copy
+                    continue
 
             future = executor.submit(
                 _run_single_candidate,
@@ -336,17 +353,22 @@ def run_batch_candidate_analysis(
 
         for future in as_completed(future_to_index):
             idx, submission, field_name, pdf_name = future_to_index[future]
+            sub_id = str(submission.get("_id", "")) if isinstance(submission, dict) else ""
             try:
                 res = future.result()
-                res["submission_id"] = str(submission["_id"])
+                res["submission_id"] = sub_id
                 res["field_name"] = field_name
                 results[idx] = res
+
+                # Cache result
+                if sub_id:
+                    storage.save_submission_analysis(sub_id, jd, res)
             except Exception as exc:
                 logger.error("Error analyzing candidate %s: %s", pdf_name, exc)
                 results[idx] = {
                     "file_name": pdf_name,
                     "pdf_path": pdf_name,
-                    "submission_id": str(submission["_id"]),
+                    "submission_id": sub_id,
                     "field_name": field_name,
                     "match_report": {
                         "percent_match": 0,

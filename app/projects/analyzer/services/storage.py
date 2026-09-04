@@ -196,3 +196,32 @@ def export_to_excel(form_id: str) -> str:
     pd.DataFrame(clean_rows).to_excel(export_path, index=False)
     return export_path
 
+
+def _hash_jd(jd: str) -> str:
+    import hashlib
+    return hashlib.sha256(jd.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def get_cached_submission_analysis(submission_id: str, jd: str):
+    try:
+        sub = _submissions_collection().find_one({"_id": ObjectId(submission_id)})
+        if sub and "analysis_cache" in sub:
+            jd_key = _hash_jd(jd)
+            return sub["analysis_cache"].get(jd_key)
+    except Exception:
+        pass
+    return None
+
+
+def save_submission_analysis(submission_id: str, jd: str, analysis: Dict[str, Any]) -> None:
+    try:
+        jd_key = _hash_jd(jd)
+        _submissions_collection().update_one(
+            {"_id": ObjectId(submission_id)},
+            {"$set": {f"analysis_cache.{jd_key}": analysis}},
+            upsert=False,
+        )
+    except Exception:
+        pass
+
+
