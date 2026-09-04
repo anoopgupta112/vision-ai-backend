@@ -1,26 +1,32 @@
 import os
 from typing import Optional
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 
 class AIClientError(Exception):
     pass
 
 
+def _get_config(key: str, default=None):
+    if has_app_context():
+        val = current_app.config.get(key)
+        if val is not None:
+            return val
+    return os.environ.get(key, default)
+
+
 def _has_gemini_keys() -> bool:
-    if current_app.config.get("GEMINI_API_KEY"):
-        return True
-    if os.environ.get("GEMINI_API_KEY"):
+    if _get_config("GEMINI_API_KEY"):
         return True
     for index in range(1, 7):
-        if current_app.config.get("GEMINI_API_KEY_%s" % index) or os.environ.get("GEMINI_API_KEY_%s" % index):
+        if _get_config("GEMINI_API_KEY_%s" % index):
             return True
     return False
 
 
 def _prefer_gemini() -> bool:
-    return current_app.config.get("USE_GEMINI", False) or _has_gemini_keys()
+    return _get_config("USE_GEMINI", False) or _has_gemini_keys()
 
 
 def complete_chat(
@@ -35,7 +41,7 @@ def complete_chat(
 
             return gemini_client.complete_chat(prompt, model, temperature, max_tokens)
         except Exception as exc:
-            if not current_app.config.get("OPENROUTER_API_KEY"):
+            if not _get_config("OPENROUTER_API_KEY"):
                 raise AIClientError(f"Gemini client error: {exc}") from exc
 
     try:

@@ -280,6 +280,23 @@ def run_candidate_analysis(
     }
 
 
+def _run_single_candidate(app_obj, pdf_path, jd, file_name, drive_file_id):
+    if app_obj:
+        with app_obj.app_context():
+            return run_candidate_analysis(
+                pdf_path=pdf_path,
+                jd=jd,
+                file_name=file_name,
+                drive_file_id=drive_file_id,
+            )
+    return run_candidate_analysis(
+        pdf_path=pdf_path,
+        jd=jd,
+        file_name=file_name,
+        drive_file_id=drive_file_id,
+    )
+
+
 def run_batch_candidate_analysis(
     pdf_targets: List[tuple],
     jd: str,
@@ -290,6 +307,13 @@ def run_batch_candidate_analysis(
     using a safe ThreadPoolExecutor.
     """
     results = [None] * len(pdf_targets)
+    app_obj = None
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context():
+            app_obj = current_app._get_current_object()
+    except Exception:
+        pass
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index = {}
@@ -302,7 +326,8 @@ def run_batch_candidate_analysis(
                 drive_file_id = None
 
             future = executor.submit(
-                run_candidate_analysis,
+                _run_single_candidate,
+                app_obj=app_obj,
                 pdf_path=absolute_path,
                 jd=jd,
                 file_name=pdf_name,

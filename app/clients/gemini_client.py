@@ -1,23 +1,31 @@
 import os
 from typing import List, Optional
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 
 class GeminiError(Exception):
     pass
 
 
+def _get_config(key: str, default=None):
+    if has_app_context():
+        val = current_app.config.get(key)
+        if val is not None:
+            return val
+    return os.environ.get(key, default)
+
+
 def _configured_api_keys() -> List[str]:
     keys: List[str] = []
 
-    primary = current_app.config.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+    primary = _get_config("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
     if primary and primary not in keys:
         keys.append(primary)
 
     for index in range(1, 7):
         env_name = "GEMINI_API_KEY_%s" % index
-        value = current_app.config.get(env_name) or os.environ.get(env_name, "")
+        value = _get_config(env_name) or os.environ.get(env_name, "")
         if value and value not in keys:
             keys.append(value)
 
@@ -26,7 +34,7 @@ def _configured_api_keys() -> List[str]:
 
 def _candidate_models(requested_model: Optional[str]) -> List[str]:
     models: List[str] = []
-    configured = requested_model or current_app.config.get("GEMINI_MODEL", "gemini-2.5-flash")
+    configured = requested_model or _get_config("GEMINI_MODEL", "gemini-2.5-flash")
     for model_name in [
         configured,
         "gemini-2.5-flash",
@@ -55,7 +63,7 @@ def complete_chat(
 
     generation_config = {
         "temperature": temperature,
-        "max_output_tokens": max_tokens or current_app.config.get("AI_MAX_TOKENS", 2048),
+        "max_output_tokens": max_tokens or _get_config("AI_MAX_TOKENS", 2048),
     }
     if "Respond ONLY with a JSON object" in prompt or "Return ONLY a valid JSON object" in prompt:
         generation_config["response_mime_type"] = "application/json"
