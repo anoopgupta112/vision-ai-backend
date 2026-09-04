@@ -77,9 +77,11 @@ def _candidate_models(requested_model: Optional[str]) -> List[str]:
     for model_name in [
         configured,
         "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
         "qwen/qwen3.6-27b",
         "qwen/qwen3.8-27b",
         "groq/compound-mini",
+        "groq/compound",
     ]:
         if model_name and model_name not in models:
             models.append(model_name)

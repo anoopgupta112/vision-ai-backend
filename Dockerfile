@@ -43,4 +43,4 @@ ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 EXPOSE 8000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60", "app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "300", "app:create_app()"]
