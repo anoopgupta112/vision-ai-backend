@@ -16,26 +16,24 @@ def _get_config(key: str, default=None):
     return os.environ.get(key, default)
 
 
-def _has_gemini_keys() -> bool:
-    if _get_config("GEMINI_API_KEY"):
-        return True
-    for index in range(1, 7):
-        if _get_config("GEMINI_API_KEY_%s" % index):
-            return True
-    return False
-
-
-def _prefer_gemini() -> bool:
-    return _get_config("USE_GEMINI", False) or _has_gemini_keys()
-
-
 def complete_chat(
     prompt: str,
     model: Optional[str] = None,
-    temperature: float = 0.2,
+    temperature: float = 0.0,
     max_tokens: Optional[int] = None,
 ) -> str:
-    if _prefer_gemini():
+    # 1. Primary: Groq API
+    if _get_config("GROQ_API_KEY"):
+        try:
+            from app.clients import groq_client
+
+            return groq_client.complete_chat(prompt, model, temperature, max_tokens)
+        except Exception as exc:
+            if not (_get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1") or _get_config("OPENROUTER_API_KEY")):
+                raise AIClientError(f"Groq client error: {exc}") from exc
+
+    # 2. Fallback: Gemini
+    if _get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1"):
         try:
             from app.clients import gemini_client
 
@@ -44,13 +42,21 @@ def complete_chat(
             if not _get_config("OPENROUTER_API_KEY"):
                 raise AIClientError(f"Gemini client error: {exc}") from exc
 
-    try:
-        from app.clients import openrouter_client
+    # 3. Fallback: OpenRouter
+    if _get_config("OPENROUTER_API_KEY"):
+        try:
+            from app.clients import openrouter_client
 
-        return openrouter_client.complete_chat(prompt, model, temperature, max_tokens)
-    except Exception as exc:
-        raise AIClientError(f"OpenRouter client error: {exc}") from exc
+            return openrouter_client.complete_chat(prompt, model, temperature, max_tokens)
+        except Exception as exc:
+            raise AIClientError(f"OpenRouter client error: {exc}") from exc
+
+    raise AIClientError("No active AI provider configured (GROQ_API_KEY is required).")
 
 
 def get_current_provider() -> str:
-    return "Gemini" if _prefer_gemini() else "OpenRouter"
+    if _get_config("GROQ_API_KEY"):
+        return "Groq"
+    if _get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1"):
+        return "Gemini"
+    return "OpenRouter"

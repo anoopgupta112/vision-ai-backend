@@ -260,7 +260,24 @@ Projects Section:
 """
     response_text = _complete_prompt(prompt)
     try:
-        json_str = re.search(r"\[[\s\S]*\]", response_text).group(0)
-        return json.loads(json_str)
+        array_match = re.search(r"\[[\s\S]*\]", response_text)
+        if array_match:
+            parsed = json.loads(array_match.group(0))
+            if isinstance(parsed, list):
+                valid_items = []
+                for item in parsed:
+                    if isinstance(item, dict):
+                        valid_items.append(item)
+                if valid_items:
+                    return valid_items
+
+        obj_match = re.search(r"\{[\s\S]*\}", response_text)
+        if obj_match:
+            parsed = json.loads(obj_match.group(0))
+            if isinstance(parsed, dict):
+                projects = parsed.get("projects") or parsed.get("project_list") or [parsed]
+                if isinstance(projects, list):
+                    return [p for p in projects if isinstance(p, dict)]
+        return []
     except Exception:
         return []
