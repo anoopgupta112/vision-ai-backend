@@ -17,37 +17,105 @@ def _complete_prompt(prompt: str) -> str:
         raise ValueError(f"AI client request failed: {exc}") from exc
 
 
-def fetch_github_code(url: str, max_lines: int = 200) -> str:
-    match = re.match(r"https://github.com/([^/]+)/([^/]+)(/|$)", url)
+def fetch_github_code(url: str, max_lines: int = 300) -> str:
+    match = re.search(r"github\.com/([^/]+)/([^/]+)", url.strip())
     if not match:
         return ""
 
-    owner, repo = match.group(1), match.group(2)
+    owner, repo = match.group(1), match.group(2).rstrip("/")
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+
     headers = {"Accept": "application/vnd.github.v3+json"}
-    github_token = current_app.config.get("GITHUB_TOKEN")
-    if github_token:
-        headers["Authorization"] = f"token {github_token}"
+    try:
+        github_token = current_app.config.get("GITHUB_TOKEN")
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+    except Exception:
+        pass
 
-    response = requests.get(f"{GITHUB_API}/repos/{owner}/{repo}/contents", headers=headers, timeout=30)
-    if response.status_code != 200:
-        return ""
+    code_exts = (
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".cpp", ".c",
+        ".go", ".rb", ".php", ".rs", ".swift", ".kt", ".scala", ".cs"
+    )
+    ignore_parts = {
+        "test", "tests", "__pycache__", "node_modules", "dist", "build",
+        ".venv", "venv", "migrations", "vendor", ".git"
+    }
 
-    files = response.json()
-    code = []
-    for item in files:
-        if item["type"] != "file":
-            continue
-        if not item["name"].endswith((".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb", ".php", ".rs", ".swift", ".kt", ".scala", ".cs")):
-            continue
-        raw_url = item["download_url"]
-        file_response = requests.get(raw_url, headers=headers, timeout=30)
-        if file_response.status_code != 200:
-            continue
-        lines = file_response.text.splitlines()
-        code.extend(lines[: max_lines - len(code)])
-        if len(code) >= max_lines:
-            break
-    return "\n".join(code)
+    code_lines = []
+
+    # 1. Try Git Trees API (recursive across all branches/folders)
+    try:
+        tree_resp = requests.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/HEAD?recursive=1",
+            headers=headers,
+            timeout=15,
+        )
+        if tree_resp.status_code == 200:
+            tree_data = tree_resp.json().get("tree", [])
+            candidates = [
+                item for item in tree_data
+                if item.get("type") == "blob"
+                and any(item.get("path", "").endswith(ext) for ext in code_exts)
+                and not any(p in ignore_parts for p in item.get("path", "").split("/"))
+            ]
+
+            def sort_key(item):
+                p = item.get("path", "").lower()
+                if p.startswith(("src/", "app/", "lib/", "core/", "pkg/")):
+                    return 0
+                if "/" not in p:
+                    return 1
+                return 2
+
+            candidates.sort(key=sort_key)
+
+            for item in candidates[:8]:
+                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{item['path']}"
+                file_resp = requests.get(raw_url, headers=headers, timeout=15)
+                if file_resp.status_code == 200:
+                    lines = [l for l in file_resp.text.splitlines() if l.strip()]
+                    code_lines.append(f"# File: {item['path']}")
+                    code_lines.extend(lines[:80])
+                    if len(code_lines) >= max_lines:
+                        break
+
+            if code_lines:
+                return "\n".join(code_lines[:max_lines])
+    except Exception:
+        pass
+
+    # 2. Fallback: Root /contents listing
+    try:
+        response = requests.get(f"{GITHUB_API}/repos/{owner}/{repo}/contents", headers=headers, timeout=20)
+        if response.status_code == 200:
+            files = response.json()
+            if isinstance(files, list):
+                for item in files:
+                    if item.get("type") == "file" and any(item.get("name", "").endswith(ext) for ext in code_exts):
+                        raw_url = item.get("download_url") or f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{item.get('name')}"
+                        file_response = requests.get(raw_url, headers=headers, timeout=15)
+                        if file_response.status_code == 200:
+                            lines = [l for l in file_response.text.splitlines() if l.strip()]
+                            code_lines.append(f"# File: {item.get('name')}")
+                            code_lines.extend(lines[:80])
+                            if len(code_lines) >= max_lines:
+                                break
+                if code_lines:
+                    return "\n".join(code_lines[:max_lines])
+
+                # 3. Fallback: If no code at root, check README.md
+                for item in files:
+                    if item.get("name", "").lower() == "readme.md":
+                        raw_url = item.get("download_url") or f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{item.get('name')}"
+                        r_resp = requests.get(raw_url, headers=headers, timeout=15)
+                        if r_resp.status_code == 200:
+                            return r_resp.text[:2000]
+    except Exception:
+        pass
+
+    return "\n".join(code_lines[:max_lines])
 
 
 def generate_questions_from_github(github_urls: List[str], num_questions: int = 10) -> Dict:

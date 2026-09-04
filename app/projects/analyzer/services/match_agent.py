@@ -1,8 +1,11 @@
 import json
+import logging
 import re
 from typing import Any, Dict
 
 from app.projects.analyzer.services.ai_client import AIClientError, complete_chat
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate_resume_against_jd(jd: str, resume_text: str):
@@ -11,25 +14,32 @@ def evaluate_resume_against_jd(jd: str, resume_text: str):
         response_text = complete_chat(prompt, temperature=0.0, max_tokens=4096)
         return extract_json_from_text(response_text)
     except AIClientError as exc:
+        logger.warning("AI client request failed in evaluate_resume_against_jd: %s", exc)
         return _fallback_match_report("AI client request failed: %s" % exc)
-    except ValueError:
-        pass
+    except ValueError as exc:
+        logger.warning("Initial JSON parse failed (%s), attempting correction prompt...", exc)
 
     try:
         correction_prompt = _json_correction_prompt(jd, resume_text, response_text)
         corrected_response = complete_chat(correction_prompt, temperature=0.0, max_tokens=2048)
         return extract_json_from_text(corrected_response)
     except AIClientError as exc:
+        logger.error("AI client request failed after retry: %s", exc)
         return _fallback_match_report("AI client request failed after retry: %s" % exc)
     except ValueError as exc:
+        logger.error("JSON parse failed after retry: %s", exc)
         return _fallback_match_report(str(exc))
 
 
 def _analysis_prompt(jd: str, resume_text: str) -> str:
     return f"""
-You are a professional HR evaluator. Your task is to strictly match the candidate's resume against a Job Description.
+You are a professional HR evaluator. Your task is to match the candidate's resume against the Job Description or Target Role.
 
-If the Job Description is too short, missing, or meaningless (less than 10 valid words), set `percent_match` to 0, and provide negatives explaining the issue.
+Guidelines:
+- If the Job Description is completely empty, gibberish, or has zero relevance to any professional skills, set `percent_match` to 0 and explain the issue in negatives.
+- If the Job Description is concise (such as a role title like "Senior Python Developer" or a brief list of requirements), evaluate the candidate against that role, seniority level, and required technologies fairly and realistically. Do NOT penalize or assign 0% merely because the JD is concise.
+- If the resume matches the core technologies, skills, or target domain, assign an appropriate realistic score (0-100).
+- If the resume text is completely empty or unreadable, set `percent_match` to 0 and state that the resume has no readable text.
 
 Respond ONLY with a JSON object using the schema:
 

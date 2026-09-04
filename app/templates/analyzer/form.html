@@ -1,67 +1,362 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Dynamic User Form</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fill the Form</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{--bg:#0b1220;--panel:#0f172a;--muted:#9fb0c5;--line:#1e2d49;--acc:#6366f1;--acc2:#22d3ee}
-    *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:#e2e8f0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .navbar{background:linear-gradient(180deg,rgba(2,6,23,.85),rgba(2,6,23,.5));border-bottom:1px solid #11213a;padding:14px 28px;font-weight:bold;font-size:1.2rem;display:flex;justify-content:space-between;align-items:center}
-    .navbar a{color:var(--muted);text-decoration:none;margin-left:16px;border-radius:8px;padding:6px 10px}
-    .navbar a:hover{background:#0c1e37;border:1px solid #2a3f63}
-    .form-wrapper{max-width:520px;margin:40px auto;background:var(--panel);border-radius:16px;border:1px solid var(--line);padding:40px 36px 32px}
-    .form-title{text-align:center;color:var(--acc);font-size:2rem;font-weight:bold;margin-bottom:24px}
-    label{display:block;font-weight:600;margin-top:14px;margin-bottom:6px;color:var(--muted)}
-    input{width:100%;padding:12px;border-radius:8px;border:1px solid #213456;background:#0b172c;color:#e5edff}
-    button{width:100%;margin-top:20px;padding:12px;border:1px solid #213456;border-radius:8px;font-weight:bold;background:#0f2039;color:#cfe4ff;cursor:pointer}
-    .download-link{display:inline-block;margin-top:18px;background:linear-gradient(90deg,#10b981,#22d3ee);padding:10px 16px;border-radius:6px;font-weight:bold;text-decoration:none;color:#00131f}
-    .success-message{background:linear-gradient(90deg,var(--acc2),var(--acc));color:white;padding:12px 18px;border-radius:7px;margin-top:18px;text-align:center;font-weight:500;display:none}
+    :root {
+      --bg: #f0ebf8;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #6d28d9;
+      --accent-hover: #5b21b6;
+      --danger: #e11d48;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      padding: 32px 16px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+    .form-container {
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .header-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+    .accent-strip {
+      height: 10px;
+      background: linear-gradient(90deg, #7c3aed, #6366f1);
+    }
+    .header-body {
+      padding: 24px 28px;
+    }
+    .form-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+    .form-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .required-notice {
+      font-size: 12px;
+      color: var(--danger);
+      font-weight: 500;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .question-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 24px 28px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+      transition: border-color 0.2s;
+    }
+    .question-card:focus-within {
+      border-color: #c4b5fd;
+    }
+    .question-label {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .req-star {
+      color: var(--danger);
+      margin-left: 2px;
+    }
+    .text-input {
+      width: 100%;
+      border: none;
+      border-bottom: 2px solid #cbd5e1;
+      padding: 8px 4px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #0f172a;
+      outline: none;
+      background: transparent;
+      transition: border-color 0.2s;
+    }
+    .text-input:focus {
+      border-bottom-color: var(--accent);
+    }
+    .file-input-wrapper {
+      padding: 18px;
+      border: 2px dashed #cbd5e1;
+      border-radius: 8px;
+      text-align: center;
+      background: #faf5ff;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .file-input-wrapper:hover {
+      border-color: var(--accent);
+      background: #f5f3ff;
+    }
+    .file-input {
+      display: block;
+      width: 100%;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .file-input::file-selector-button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      margin-right: 12px;
+      transition: background 0.2s;
+    }
+    .file-input::file-selector-button:hover {
+      background: var(--accent-hover);
+    }
+    .actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .submit-btn {
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .submit-btn:hover {
+      background: var(--accent-hover);
+    }
+    .submit-btn:active {
+      transform: scale(0.98);
+    }
+    .clear-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+    .clear-btn:hover {
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--text);
+    }
+    .success-card {
+      display: none;
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 36px 28px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+    .success-icon {
+      width: 44px;
+      height: 44px;
+      background: #dcfce7;
+      color: #16a34a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+    .success-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+    .success-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .reset-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .reset-link:hover {
+      text-decoration: underline;
+    }
+    .footer-text {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 16px 0;
+    }
   </style>
 </head>
 <body>
-  <div class="navbar">
-    <div>Dynamic User Form</div>
-    <div>
-      <a href="/api/analyzer">Home</a>
-      <a href="/api/analyzer/form-builder">Form Builder</a>
-      <a href="/api/analyzer/match_results">Results</a>
+  <div class="form-container">
+    <!-- Main Form Section -->
+    <div id="formSection">
+      <div class="header-card">
+        <div class="accent-strip"></div>
+        <div class="header-body">
+          <h1 class="form-title">Fill the Form</h1>
+          <p class="form-subtitle">Please complete the application form and attach your documents. Your details will be reviewed directly by the hiring team.</p>
+          <div class="required-notice">* Indicates required question</div>
+        </div>
+      </div>
+
+      <form method="post" id="userForm" enctype="multipart/form-data" style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
+        {% for field in fields %}
+          {% set is_req = field.required is not defined or field.required %}
+          <div class="question-card">
+            <label class="question-label" for="field_{{ field.name }}">
+              {{ field.label or field.name }}{% if is_req %}<span class="req-star">*</span>{% else %}<span style="font-size:12px;color:#64748b;font-weight:normal;margin-left:6px;">(Optional)</span>{% endif %}
+            </label>
+            {% if field.data_type == 'file' %}
+              <div class="file-input-wrapper">
+                <input type="file" id="field_{{ field.name }}" name="{{ field.name }}" class="file-input" {% if field.accept %}accept=".{{ field.accept | join(',.') }}"{% endif %} {% if is_req %}required{% endif %}>
+              </div>
+            {% elif field.data_type == 'number' %}
+              <input 
+                type="number" 
+                id="field_{{ field.name }}" 
+                name="{{ field.name }}" 
+                placeholder="Your answer" 
+                class="text-input" 
+                {% if is_req %}required{% endif %}
+              >
+            {% elif 'email' in field.name.lower() %}
+              <input 
+                type="email" 
+                id="field_{{ field.name }}" 
+                name="{{ field.name }}" 
+                placeholder="Your email address" 
+                class="text-input" 
+                {% if is_req %}required{% endif %}
+              >
+            {% elif 'phone' in field.name.lower() %}
+              <input 
+                type="tel" 
+                id="field_{{ field.name }}" 
+                name="{{ field.name }}" 
+                placeholder="Your phone number" 
+                class="text-input" 
+                {% if is_req %}required{% endif %}
+              >
+            {% else %}
+              <input 
+                type="text" 
+                id="field_{{ field.name }}" 
+                name="{{ field.name }}" 
+                placeholder="Your answer" 
+                class="text-input" 
+                {% if is_req %}required{% endif %}
+              >
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="actions-bar">
+          <button type="submit" id="submitBtn" class="submit-btn">Submit</button>
+          <button type="button" id="clearBtn" class="clear-btn">Clear form</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Success Confirmation Section (Google Forms Style) -->
+    <div id="successCard" class="success-card">
+      <div class="accent-strip" style="border-radius: 12px 12px 0 0; margin: -36px -28px 24px -28px;"></div>
+      <div class="success-icon">✓</div>
+      <h2 class="success-title">Your response has been recorded.</h2>
+      <p class="success-desc">Thank you! Your information and resume have been securely submitted to the hiring team.</p>
+      <a id="submitAnother" class="reset-link">Submit another response</a>
+    </div>
+
+    <div class="footer-text">
+      This form was created inside Platform Workspace. Never submit passwords.
     </div>
   </div>
-  <div class="form-wrapper">
-    <div class="form-title">Fill the Form</div>
-    <form method="post" id="userForm" enctype="multipart/form-data">
-      {% for field in fields %}
-        <div>
-          <label>{{ field.label }}:</label>
-          {% if field.data_type == 'file' %}
-            <input type="file" name="{{ field.name }}" {% if field.accept %}accept=".{{ field.accept | join(',.') }}"{% endif %} required>
-          {% else %}
-            <input type="{{ field.data_type }}" name="{{ field.name }}" required>
-          {% endif %}
-        </div>
-      {% endfor %}
-      <button type="submit">Submit</button>
-    </form>
-    <a class="download-link" href="/api/analyzer/v1/data/{{ form_id }}/excel">Download Excel</a>
-    <button id="analyzeAllBtn" style="display:none;">Analyze All PDFs</button>
-    <div id="successMsg" class="success-message">Form submitted successfully!</div>
-  </div>
+
   <script>
-    document.getElementById('userForm').onsubmit = async function(e) {
+    const form = document.getElementById('userForm');
+    const formSection = document.getElementById('formSection');
+    const successCard = document.getElementById('successCard');
+    const submitBtn = document.getElementById('submitBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const submitAnother = document.getElementById('submitAnother');
+
+    clearBtn.addEventListener('click', () => {
+      form.reset();
+    });
+
+    submitAnother.addEventListener('click', () => {
+      form.reset();
+      successCard.style.display = 'none';
+      formSection.style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const form = e.target;
-      const formData = new FormData(form);
-      const response = await fetch(`/api/analyzer/v1/data/{{ form_id }}`, { method: 'POST', body: formData });
-      if (response.ok) {
-        form.reset();
-        document.getElementById('successMsg').style.display = 'block';
-        setTimeout(() => { document.getElementById('successMsg').style.display = 'none'; }, 2500);
-        document.getElementById('analyzeAllBtn').style.display = 'block';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+
+      try {
+        const formData = new FormData(form);
+        const response = await fetch(`/api/analyzer/forms/{{ form_id }}/view`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          formSection.style.display = 'none';
+          successCard.style.display = 'block';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const resJson = await response.json().catch(() => ({}));
+          alert(resJson.error || 'Failed to submit form. Please try again.');
+        }
+      } catch (err) {
+        alert('Network error. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit';
       }
-    }
-    document.getElementById('analyzeAllBtn').onclick = function() {
-      window.location.href = `/api/analyzer/analyze_pdfs/{{ form_id }}`;
-    }
+    });
   </script>
 </body>
 </html>

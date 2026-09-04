@@ -1,0 +1,311 @@
+import os
+import re
+import operator
+import logging
+from typing import TypedDict, List, Dict, Any, Annotated, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from langgraph.graph import StateGraph, START, END
+
+from app.projects.analyzer.services.ocr_engine import extract_text_from_pdf
+from app.projects.analyzer.services.match_agent import evaluate_resume_against_jd
+from app.projects.analyzer.services.github_agent import (
+    extract_experience_section,
+    extract_project_section,
+    generate_questions_from_experience,
+    generate_questions_from_projects,
+    generate_questions_from_github,
+    generate_questions_from_jd,
+)
+from app.projects.analyzer.services.schemas import (
+    ResumeEvaluationOutput,
+    TechnicalQuestionSet,
+    CandidateAnalysisResult,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class CandidateGraphState(TypedDict):
+    pdf_path: str
+    file_name: str
+    jd: str
+    resume_text: str
+    links: List[Dict[str, Any]]
+    match_report: Optional[Dict[str, Any]]
+    question_sets: Annotated[List[Dict[str, Any]], operator.add]
+    errors: Annotated[List[str], operator.add]
+
+
+# Node 1: PDF Extraction
+def node_extract_pdf(state: CandidateGraphState) -> Dict[str, Any]:
+    if state.get("resume_text"):
+        return {}
+    pdf_path = state.get("pdf_path", "")
+    try:
+        if pdf_path and os.path.exists(pdf_path):
+            resume_text, links = extract_text_from_pdf(pdf_path)
+            return {
+                "resume_text": resume_text or "",
+                "links": links or [],
+            }
+        else:
+            return {
+                "resume_text": "",
+                "links": [],
+            }
+    except Exception as exc:
+        logger.error("Failed to extract PDF %s: %s", pdf_path, exc)
+        return {
+            "resume_text": "",
+            "links": [],
+            "errors": [f"PDF extraction error: {str(exc)}"],
+        }
+
+
+# Node 2: Resume-to-JD Fit Evaluation
+def node_evaluate_fit(state: CandidateGraphState) -> Dict[str, Any]:
+    jd = state.get("jd", "")
+    resume_text = state.get("resume_text", "")
+    try:
+        report = evaluate_resume_against_jd(jd, resume_text)
+        return {"match_report": report}
+    except Exception as exc:
+        logger.error("Failed to evaluate match: %s", exc)
+        return {
+            "match_report": {
+                "percent_match": 0,
+                "positive": [],
+                "negative": [{"description": f"Evaluation error: {str(exc)}", "keywords": []}],
+                "description": "Failed to evaluate candidate fit.",
+            },
+            "errors": [f"Evaluation error: {str(exc)}"],
+        }
+
+
+# Conditional Router
+def route_technical_deep_dive(state: CandidateGraphState) -> str:
+    links = state.get("links", [])
+    github_links = [item["uri"] for item in links if isinstance(item, dict) and "uri" in item]
+    has_github_repo = any(re.match(r"https://github.com/[^/]+/[^/]+", url) for url in github_links)
+
+    if has_github_repo:
+        return "analyze_github"
+    return "analyze_jd_fallback"
+
+
+# Node 3A: GitHub Repository Question Generator
+def node_analyze_github(state: CandidateGraphState) -> Dict[str, Any]:
+    links = state.get("links", [])
+    github_links = [item["uri"] for item in links if isinstance(item, dict) and "uri" in item]
+    repo_links = [url for url in set(github_links) if re.match(r"https://github.com/[^/]+/[^/]+", url)]
+
+    qsets = []
+    for repo_url in sorted(repo_links):
+        try:
+            qdata = generate_questions_from_github([repo_url], 10)
+            if qdata.get("summary") == "No code found.":
+                continue
+            qsets.append(
+                {
+                    "repo": repo_url,
+                    "questions": qdata.get("questions", []),
+                    "summary": qdata.get("summary", ""),
+                    "source": "github",
+                }
+            )
+        except Exception as exc:
+            logger.warning("Failed analyzing GitHub repo %s: %s", repo_url, exc)
+
+    return {"question_sets": qsets}
+
+
+# Node 3B: Job Description Fallback Question Generator
+def node_analyze_jd_fallback(state: CandidateGraphState) -> Dict[str, Any]:
+    jd = state.get("jd", "")
+    qsets = []
+    if jd.strip():
+        try:
+            jd_qdata = generate_questions_from_jd(jd, 10)
+            if jd_qdata.get("questions"):
+                qsets.append(
+                    {
+                        "repo": "Job Description",
+                        "questions": jd_qdata.get("questions", []),
+                        "summary": jd_qdata.get("summary", ""),
+                        "source": "jd",
+                    }
+                )
+        except Exception as exc:
+            logger.warning("Failed generating JD questions: %s", exc)
+
+    return {"question_sets": qsets}
+
+
+# Node 4: Parallel Branch for Work Experience & Projects
+def node_analyze_experience_projects(state: CandidateGraphState) -> Dict[str, Any]:
+    resume_text = state.get("resume_text", "")
+    qsets = []
+
+    if resume_text:
+        # Experience questions
+        try:
+            experience_text = extract_experience_section(resume_text)
+            exp_qdata = generate_questions_from_experience(experience_text, 5)
+            if exp_qdata.get("questions"):
+                qsets.append(
+                    {
+                        "repo": "Experience",
+                        "questions": exp_qdata.get("questions", []),
+                        "summary": exp_qdata.get("summary", ""),
+                        "source": "experience",
+                    }
+                )
+        except Exception as exc:
+            logger.warning("Failed generating experience questions: %s", exc)
+
+        # Projects questions
+        try:
+            project_text = extract_project_section(resume_text)
+            for project in generate_questions_from_projects(project_text):
+                qsets.append(
+                    {
+                        "repo": project.get("project_name", "Project"),
+                        "questions": project.get("questions", []),
+                        "summary": project.get("summary", ""),
+                        "source": "project",
+                    }
+                )
+        except Exception as exc:
+            logger.warning("Failed generating project questions: %s", exc)
+
+    return {"question_sets": qsets}
+
+
+# Node 5: Synthesize and Validate
+def node_synthesize(state: CandidateGraphState) -> Dict[str, Any]:
+    return {}
+
+
+# Build and compile the LangGraph workflow
+def create_candidate_analysis_graph():
+    workflow = StateGraph(CandidateGraphState)
+
+    # Add all nodes
+    workflow.add_node("extract_pdf", node_extract_pdf)
+    workflow.add_node("evaluate_fit", node_evaluate_fit)
+    workflow.add_node("analyze_github", node_analyze_github)
+    workflow.add_node("analyze_jd_fallback", node_analyze_jd_fallback)
+    workflow.add_node("analyze_experience_projects", node_analyze_experience_projects)
+    workflow.add_node("synthesize", node_synthesize)
+
+    # Wire edges
+    workflow.add_edge(START, "extract_pdf")
+    workflow.add_edge("extract_pdf", "evaluate_fit")
+
+    # From evaluate_fit: conditional router for GitHub vs JD + parallel fan-out to experience/projects
+    workflow.add_conditional_edges(
+        "evaluate_fit",
+        route_technical_deep_dive,
+        {
+            "analyze_github": "analyze_github",
+            "analyze_jd_fallback": "analyze_jd_fallback",
+        },
+    )
+    workflow.add_edge("evaluate_fit", "analyze_experience_projects")
+
+    # Fan-in to synthesize
+    workflow.add_edge("analyze_github", "synthesize")
+    workflow.add_edge("analyze_jd_fallback", "synthesize")
+    workflow.add_edge("analyze_experience_projects", "synthesize")
+    workflow.add_edge("synthesize", END)
+
+    return workflow.compile()
+
+
+# Global compiled graph instance
+analysis_graph = create_candidate_analysis_graph()
+
+
+def run_candidate_analysis(pdf_path: str, jd: str, file_name: Optional[str] = None) -> Dict[str, Any]:
+    """Runs the LangGraph candidate analysis pipeline on a single resume PDF."""
+    initial_state: CandidateGraphState = {
+        "pdf_path": pdf_path,
+        "file_name": file_name or os.path.basename(pdf_path),
+        "jd": jd,
+        "resume_text": "",
+        "links": [],
+        "match_report": None,
+        "question_sets": [],
+        "errors": [],
+    }
+
+    final_state = analysis_graph.invoke(initial_state)
+
+    match_report = final_state.get("match_report") or {
+        "percent_match": 0,
+        "positive": [],
+        "negative": [],
+        "description": "No evaluation completed.",
+    }
+
+    question_sets = final_state.get("question_sets", [])
+    github_questions = [q for q in question_sets if q.get("source") == "github"]
+
+    return {
+        "file_name": final_state["file_name"],
+        "pdf_path": final_state["file_name"],
+        "match_report": match_report,
+        "question_sets": question_sets,
+        "github_questions": github_questions or question_sets,
+        "links": final_state.get("links", []),
+        "resume_text": final_state.get("resume_text", ""),
+        "errors": final_state.get("errors", []),
+    }
+
+
+def run_batch_candidate_analysis(
+    pdf_targets: List[tuple],
+    jd: str,
+    max_workers: int = 4,
+) -> List[Dict[str, Any]]:
+    """
+    Executes LangGraph analysis across multiple candidate resumes in parallel
+    using a safe ThreadPoolExecutor.
+    """
+    results = [None] * len(pdf_targets)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {}
+        for idx, target in enumerate(pdf_targets):
+            # target is (submission, field_name, pdf_name, absolute_path)
+            submission, field_name, pdf_name, absolute_path = target
+            future = executor.submit(run_candidate_analysis, absolute_path, jd, pdf_name)
+            future_to_index[future] = (idx, submission, field_name, pdf_name)
+
+        for future in as_completed(future_to_index):
+            idx, submission, field_name, pdf_name = future_to_index[future]
+            try:
+                res = future.result()
+                res["submission_id"] = str(submission["_id"])
+                res["field_name"] = field_name
+                results[idx] = res
+            except Exception as exc:
+                logger.error("Error analyzing candidate %s: %s", pdf_name, exc)
+                results[idx] = {
+                    "file_name": pdf_name,
+                    "pdf_path": pdf_name,
+                    "submission_id": str(submission["_id"]),
+                    "field_name": field_name,
+                    "match_report": {
+                        "percent_match": 0,
+                        "positive": [],
+                        "negative": [{"description": str(exc), "keywords": []}],
+                        "description": "Error during analysis",
+                    },
+                    "question_sets": [],
+                    "github_questions": [],
+                    "links": [],
+                }
+
+    return [r for r in results if r is not None]

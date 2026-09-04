@@ -1,4 +1,5 @@
 import os
+import io
 from datetime import datetime
 from typing import Any, Dict, List
 from uuid import uuid4
@@ -43,6 +44,12 @@ def get_form(form_id: str):
         "user_id": str(form["user_id"]) if form.get("user_id") is not None else None,
         "name": form.get("name"),
         "fields": form.get("fields", []),
+        "drive_folder_id": form.get("drive_folder_id"),
+        "drive_folder_name": form.get("drive_folder_name"),
+        "drive_folder_url": form.get("drive_folder_url"),
+        "vault_folder_id": form.get("vault_folder_id"),
+        "vault_folder_url": form.get("vault_folder_url"),
+        "shared_emails": form.get("shared_emails", []),
         "submissions": [submission.get("data", {}) for submission in submissions],
         "submission_docs": submissions,
         "created_at": form.get("created_at"),
@@ -50,8 +57,19 @@ def get_form(form_id: str):
     }
 
 
-def list_forms(user_id: str = None):
-    query = {"user_id": user_id} if user_id else {}
+def list_forms(user_id: str = None, is_admin: bool = False):
+    if is_admin:
+        query = {}
+    elif not user_id:
+        return []
+    else:
+        query_conditions = [{"user_id": str(user_id)}]
+        try:
+            query_conditions.append({"user_id": ObjectId(user_id)})
+        except Exception:
+            pass
+        query = {"$or": query_conditions}
+
     forms = list(_forms_collection().find(query).sort("updated_at", -1))
     result = []
     for form in forms:
@@ -63,6 +81,12 @@ def list_forms(user_id: str = None):
                 "template_name": form.get("template_name"),
                 "fields": form.get("fields", []),
                 "submission_count": _submissions_collection().count_documents({"form_id": form["form_id"]}),
+                "drive_folder_id": form.get("drive_folder_id"),
+                "drive_folder_name": form.get("drive_folder_name"),
+                "drive_folder_url": form.get("drive_folder_url"),
+                "vault_folder_id": form.get("vault_folder_id"),
+                "vault_folder_url": form.get("vault_folder_url"),
+                "shared_emails": form.get("shared_emails", []),
                 "created_at": form.get("created_at").isoformat() if form.get("created_at") else None,
                 "updated_at": form.get("updated_at").isoformat() if form.get("updated_at") else None,
             }
@@ -117,6 +141,45 @@ def get_submission_documents(form_id: str, submission_ids=None):
     return list(_submissions_collection().find(query).sort("created_at", -1))
 
 
+def _prepare_excel_rows(submissions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Cleans submission data for Excel export: formats file fields as Google Drive URLs."""
+    rows = []
+    for sub in submissions:
+        clean_row = {}
+        for k, v in sub.items():
+            if k == "id":
+                continue
+            if isinstance(v, dict):
+                # Format uploaded files as Google Drive direct link or clean file name
+                if v.get("drive_url"):
+                    clean_row[k] = v["drive_url"]
+                elif v.get("name"):
+                    clean_row[k] = v["name"]
+                else:
+                    clean_row[k] = str(v)
+            else:
+                clean_row[k] = v
+        rows.append(clean_row)
+    return rows
+
+
+def export_to_excel_bytes(form_id: str) -> bytes:
+    """Generates the Excel export directly in memory as bytes (0 VPS disk usage)."""
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError("pandas is not installed.") from exc
+
+    submissions = get_form_submissions(form_id)
+    if not submissions:
+        raise FileNotFoundError("No submissions found.")
+
+    clean_rows = _prepare_excel_rows(submissions)
+    output = io.BytesIO()
+    pd.DataFrame(clean_rows).to_excel(output, index=False)
+    return output.getvalue()
+
+
 def export_to_excel(form_id: str) -> str:
     try:
         import pandas as pd
@@ -129,5 +192,7 @@ def export_to_excel(form_id: str) -> str:
     export_dir = os.path.abspath(os.path.join(current_app.config.get("ANALYZER_UPLOAD_DIR", "uploads/analyzer"), "exports"))
     os.makedirs(export_dir, exist_ok=True)
     export_path = os.path.join(export_dir, f"{form_id}_data.xlsx")
-    pd.DataFrame(submissions).to_excel(export_path, index=False)
+    clean_rows = _prepare_excel_rows(submissions)
+    pd.DataFrame(clean_rows).to_excel(export_path, index=False)
     return export_path
+

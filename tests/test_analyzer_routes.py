@@ -1,12 +1,13 @@
 import unittest
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import types
 import sys
 
 import app as app_module
 
 
+from app.projects.analyzer.api.routes import ANALYZER_CREDIT_COST_PER_TARGET
 AUTH_HEADERS = {"Authorization": "Bearer valid-token"}
 
 
@@ -117,6 +118,45 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json(), {"error": "Access denied"})
 
+    @patch("app.projects.analyzer.api.routes.storage.get_form")
+    def test_download_excel_rejects_non_owner(self, get_form):
+        get_form.return_value = {
+            "form_id": "form123",
+            "user_id": "other-user-999",
+            "fields": [{"name": "name", "label": "Name", "data_type": "text"}],
+        }
+
+        response = self.client.get(
+            "/api/analyzer/v1/data/form123/excel",
+            headers=AUTH_HEADERS,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json(), {"error": "Access denied"})
+
+    @patch("app.projects.analyzer.api.routes.storage.get_form")
+    def test_rejects_form_with_no_owner(self, get_form):
+        get_form.return_value = {
+            "form_id": "form123",
+            "user_id": None,
+            "fields": [{"name": "name", "label": "Name", "data_type": "text"}],
+        }
+
+        response = self.client.get(
+            "/api/analyzer/forms/form123/submissions",
+            headers=AUTH_HEADERS,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json(), {"error": "Access denied"})
+
+    @patch("app.projects.analyzer.api.routes.storage.list_forms")
+    def test_forms_list_filters_by_logged_in_user_id(self, mock_list_forms):
+        mock_list_forms.return_value = []
+        response = self.client.get("/api/analyzer/forms", headers=AUTH_HEADERS)
+        self.assertEqual(response.status_code, 200)
+        mock_list_forms.assert_called_once_with("user-1", is_admin=False)
+
     def test_github_questions_requires_urls(self):
         with patch(
             "app.projects.analyzer.api.routes.generate_questions_from_github",
@@ -168,7 +208,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"matches": [{"file_name": "resume.pdf", "pdf_path": "resume.pdf", "match_report": {}, "question_sets": [], "github_questions": [], "links": [], "resume_text": ""}]})
         get_user_balance.assert_called_once_with("user-1")
-        deduct_credits.assert_called_once_with("user-1", 1, note="Analyzer usage: matched 1 uploaded PDF(s)")
+        deduct_credits.assert_called_once_with("user-1", ANALYZER_CREDIT_COST_PER_TARGET, note="Analyzer usage: matched 1 uploaded PDF(s)")
         process_uploaded_pdfs.assert_called_once()
 
     def test_resume_match_deducts_credits_for_uploaded_pdfs(self):
@@ -180,7 +220,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
             ],
         ) as process_uploaded_pdfs, patch(
             "app.projects.analyzer.api.routes.credits_pipeline.get_user_balance",
-            return_value=5,
+            return_value=2 * ANALYZER_CREDIT_COST_PER_TARGET,
         ) as get_user_balance, patch(
             "app.projects.analyzer.api.routes.credits_pipeline.deduct_credits"
         ) as deduct_credits:
@@ -200,7 +240,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["matches"]), 2)
         get_user_balance.assert_called_once_with("user-1")
-        deduct_credits.assert_called_once_with("user-1", 2, note="Analyzer usage: matched 2 uploaded PDF(s)")
+        deduct_credits.assert_called_once_with("user-1", 2 * ANALYZER_CREDIT_COST_PER_TARGET, note="Analyzer usage: matched 2 uploaded PDF(s)")
         process_uploaded_pdfs.assert_called_once()
 
     def test_resume_match_returns_insufficient_credit_error_before_processing(self):
@@ -223,7 +263,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.get_json(), {"error": "Insufficient credits. You have 0, need 1"})
+        self.assertEqual(response.get_json(), {"error": f"Insufficient credits. You have 0, need {ANALYZER_CREDIT_COST_PER_TARGET}"})
         get_user_balance.assert_called_once_with("user-1")
         deduct_credits.assert_not_called()
         process_uploaded_pdfs.assert_not_called()
@@ -289,7 +329,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         get_user_balance.assert_called_once_with("user-1")
         deduct_credits.assert_called_once_with(
             "user-1",
-            1,
+            ANALYZER_CREDIT_COST_PER_TARGET,
             note="Analyzer usage: analyzed 1 submission PDF(s) for form form123",
         )
 
@@ -394,6 +434,86 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
 
         self.assertTrue(captured_configs)
         self.assertEqual(captured_configs[0]["response_mime_type"], "application/json")
+
+    def test_form_view_get_html_and_json(self):
+        with patch("app.projects.analyzer.api.routes.storage.get_form") as get_form:
+            get_form.return_value = {
+                "form_id": "testform1",
+                "name": "Software Engineer Intake",
+                "fields": [
+                    {"name": "email", "label": "Email", "data_type": "text"},
+                    {"name": "resume", "label": "Resume", "data_type": "file"},
+                ],
+            }
+
+            # Browser HTML request
+            resp_html = self.client.get("/api/analyzer/forms/testform1/view", headers={"Accept": "text/html"})
+            self.assertEqual(resp_html.status_code, 200)
+            self.assertIn(b"Fill the Form", resp_html.data)
+            self.assertIn(b'<input type="file"', resp_html.data)
+
+            # JSON request
+            resp_json = self.client.get("/api/analyzer/forms/testform1/view", headers={"Accept": "application/json"})
+            self.assertEqual(resp_json.status_code, 200)
+            self.assertEqual(resp_json.get_json()["form_id"], "testform1")
+
+    def test_form_view_post_submits_data_and_file(self):
+        with patch("app.projects.analyzer.api.routes.storage.get_form") as get_form, \
+             patch("app.projects.analyzer.api.routes.storage.save_upload") as save_upload, \
+             patch("app.projects.analyzer.api.routes.storage.add_submission") as add_submission:
+            get_form.return_value = {
+                "form_id": "testform1",
+                "name": "Engineering Form",
+                "fields": [
+                    {"name": "full_name", "data_type": "text"},
+                    {"name": "email", "data_type": "text"},
+                    {"name": "resume", "data_type": "file"},
+                ],
+            }
+            save_upload.return_value = {
+                "name": "resume.pdf",
+                "path": "/uploads/test.pdf",
+                "relative_path": "uploads/test.pdf",
+                "size": 1000,
+            }
+            add_submission.return_value = {
+                "_id": "sub-12345",
+                "data": {
+                    "full_name": "Jane Doe",
+                    "email": "jane@example.com",
+                    "resume": {"name": "resume.pdf"},
+                },
+            }
+
+            with patch("app.projects.analyzer.services.google_drive.ensure_vault_form_structure") as mock_struct, \
+                 patch("app.projects.analyzer.services.google_drive.upload_resume_stream") as mock_upload, \
+                 patch("app.projects.analyzer.services.google_drive.sync_excel_stream"), \
+                 patch("app.projects.analyzer.services.storage._forms_collection") as mock_f_col:
+                mock_struct.return_value = {
+                    "root_id": "root-1",
+                    "form_folder_id": "form-1",
+                    "resumes_folder_id": "resumes-1",
+                    "folder_url": "https://drive.google.com/test",
+                }
+                mock_upload.return_value = {
+                    "file_id": "file-123",
+                    "web_view_link": "https://drive.google.com/file-123",
+                }
+                mock_f_col.return_value = MagicMock()
+
+                resp = self.client.post(
+                    "/api/analyzer/forms/testform1/view",
+                    data={
+                        "full_name": "Jane Doe",
+                        "email": "jane@example.com",
+                        "resume": (BytesIO(b"%PDF-1.4 fake"), "resume.pdf"),
+                    },
+                    content_type="multipart/form-data",
+                )
+                self.assertEqual(resp.status_code, 201)
+                data = resp.get_json()
+                self.assertEqual(data["status"], "success")
+                self.assertEqual(data["full_name"], "Jane Doe")
 
 
 if __name__ == "__main__":
