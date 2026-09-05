@@ -192,7 +192,7 @@ class AnalyzerRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["form"]["name"], "Hiring Intake")
 
     @patch("app.projects.analyzer.api.routes.credits_pipeline.deduct_credits")
-    @patch("app.projects.analyzer.api.routes.credits_pipeline.get_user_balance", return_value=5)
+    @patch("app.projects.analyzer.api.routes.credits_pipeline.get_user_balance", return_value=ANALYZER_CREDIT_COST_PER_TARGET)
     @patch("app.projects.analyzer.api.routes.process_uploaded_pdfs", return_value=[{"pdf_path": "resume.pdf", "match_report": {}, "github_questions": [], "links": []}])
     def test_resume_match_returns_results(self, process_uploaded_pdfs, get_user_balance, deduct_credits):
         response = self.client.post(

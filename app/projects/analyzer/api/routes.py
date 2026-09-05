@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("analyzer", __name__, url_prefix="/api/analyzer")
 
-ANALYZER_CREDIT_COST_PER_TARGET = int(os.getenv("ANALYZER_PRICE", 5))
+ANALYZER_CREDIT_COST_PER_TARGET = int(os.getenv("ANALYZER_PRICE", 10))
 
 
 @bp.route("", methods=["GET"])
@@ -152,7 +152,7 @@ def _analyzer_credit_amount(target_count: int) -> int:
     try:
         price = int(os.getenv("ANALYZER_PRICE", ANALYZER_CREDIT_COST_PER_TARGET))
     except (ValueError, TypeError):
-        price = 5
+        price = 10
     return max(target_count, 0) * price
 
 
