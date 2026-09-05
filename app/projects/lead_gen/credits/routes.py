@@ -51,8 +51,8 @@ def request_credits():
     
     is_company, domain = is_company_email(user_email)
     
-    if is_company:
-        # Auto-approve for company domain
+    if is_company and not credit_requests.is_domain_already_auto_approved(domain):
+        # Auto-approve ONLY for the first user from this company domain
         req = credit_requests.create_auto_approved_request(
             user_id=user_id_str,
             amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
@@ -76,7 +76,7 @@ def request_credits():
             'request': credit_requests.to_response(req, user_email)
         }), 201
     else:
-        # Public/consumer email -> create pending request for admin approval
+        # Either public/consumer email OR subsequent employee from an already-approved company domain
         req = credit_requests.create_request(
             user_id=user_id_str,
             amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
@@ -86,8 +86,13 @@ def request_credits():
         if not req:
             return jsonify({'error': 'You already have a pending credit request'}), 400
         
+        if is_company:
+            msg = f'Free credits have already been auto-approved for {domain}. Your credit request has been submitted for admin approval.'
+        else:
+            msg = f'Credit request for {credit_requests.DEFAULT_CREDIT_AMOUNT} credits submitted. Awaiting admin approval.'
+        
         return jsonify({
-            'message': f'Credit request for {credit_requests.DEFAULT_CREDIT_AMOUNT} credits submitted. Awaiting admin approval.',
+            'message': msg,
             'auto_approved': False,
             'request': credit_requests.to_response(req, user_email)
         }), 201

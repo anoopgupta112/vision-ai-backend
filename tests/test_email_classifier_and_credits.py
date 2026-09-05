@@ -122,6 +122,7 @@ class TestCreditAutoApprovalIntegration(unittest.TestCase):
         }
         mock_credit_requests.has_pending_request.return_value = False
         mock_credit_requests.has_approved_request.return_value = False
+        mock_credit_requests.is_domain_already_auto_approved.return_value = False
         mock_credit_requests.DEFAULT_CREDIT_AMOUNT = 50
         
         req_doc = {
@@ -215,6 +216,61 @@ class TestCreditAutoApprovalIntegration(unittest.TestCase):
         self.assertIn('Awaiting admin approval', data['message'])
         
         # Pipeline add_credits should NOT be called for pending requests
+        mock_pipeline.add_credits.assert_not_called()
+        mock_credit_requests.create_request.assert_called_once()
+
+    @patch('app.projects.lead_gen.credits.routes.get_current_user')
+    @patch('app.projects.lead_gen.credits.routes.pipeline')
+    @patch('app.projects.lead_gen.credits.routes.credit_requests')
+    def test_second_employee_from_same_company_queued_as_pending(self, mock_credit_requests, mock_pipeline, mock_get_user):
+        """Second employee from a company whose domain was already auto-approved should queue for admin review"""
+        user_id = str(ObjectId())
+        mock_get_user.return_value = {
+            '_id': ObjectId(user_id),
+            'email': 'colleague@surepass.io',
+            'role': 'user'
+        }
+        mock_credit_requests.has_pending_request.return_value = False
+        mock_credit_requests.has_approved_request.return_value = False
+        # Domain already auto-approved by another user!
+        mock_credit_requests.is_domain_already_auto_approved.return_value = True
+        mock_credit_requests.DEFAULT_CREDIT_AMOUNT = 50
+        
+        req_doc = {
+            '_id': ObjectId(),
+            'user_id': ObjectId(user_id),
+            'amount': 50,
+            'reason': 'Evaluating for team',
+            'status': 'pending',
+            'admin_note': None,
+            'processed_by': None,
+            'created_at': datetime.utcnow(),
+            'processed_at': None
+        }
+        mock_credit_requests.create_request.return_value = req_doc
+        mock_credit_requests.to_response.return_value = {
+            'id': str(req_doc['_id']),
+            'user_id': user_id,
+            'user_email': 'colleague@surepass.io',
+            'amount': 50,
+            'status': 'pending'
+        }
+
+        with patch('app.core.middleware.jwt.decode', return_value={'user_id': user_id}), \
+             patch('app.auth.models.find_user_by_id', return_value=mock_get_user.return_value):
+            response = self.client.post(
+                '/api/lead_gen/credits/request',
+                json={'reason': 'Evaluating for team'},
+                headers={'Authorization': 'Bearer test-token'}
+            )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertFalse(data['auto_approved'])
+        self.assertEqual(data['request']['status'], 'pending')
+        self.assertIn('already been auto-approved for surepass.io', data['message'])
+        
+        # Pipeline add_credits should NOT be called for second employee
         mock_pipeline.add_credits.assert_not_called()
         mock_credit_requests.create_request.assert_called_once()
 

@@ -27,6 +27,16 @@ def has_approved_request(user_id: str) -> bool:
     uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
     return coll.count_documents({'user_id': uid, 'status': STATUS_APPROVED}) > 0
 
+def is_domain_already_auto_approved(domain: str) -> bool:
+    """Check if any user from this company domain has already received auto-approved credits"""
+    if not domain:
+        return False
+    coll = get_collection(COLLECTION)
+    return coll.count_documents({
+        'domain': domain.strip().lower(),
+        'status': STATUS_APPROVED
+    }) > 0
+
 def create_auto_approved_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOUNT, reason: str = None, domain: str = None) -> dict:
     """
     Create an automatically approved credit request for verified business/company domain
@@ -43,13 +53,15 @@ def create_auto_approved_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOU
     coll = get_collection(COLLECTION)
     uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
     now = datetime.utcnow()
+    normalized_domain = domain.strip().lower() if domain else None
     
-    admin_note = f"Auto-approved for verified company domain: {domain}" if domain else "Auto-approved for company email"
+    admin_note = f"Auto-approved for verified company domain: {normalized_domain}" if normalized_domain else "Auto-approved for company email"
     
     doc = {
         'user_id': uid,
         'amount': amount,
         'reason': reason,
+        'domain': normalized_domain,
         'status': STATUS_APPROVED,
         'admin_note': admin_note,
         'processed_by': SYSTEM_AUTO_APPROVAL,
