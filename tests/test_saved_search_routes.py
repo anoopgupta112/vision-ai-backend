@@ -41,8 +41,8 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Keyword is required"})
 
-    @patch("app.lead_gen.saved_searches.routes.pipeline.create_saved_search")
-    @patch("app.lead_gen.saved_searches.routes.model.to_response")
+    @patch("app.projects.lead_gen.saved_searches.routes.pipeline.create_saved_search")
+    @patch("app.projects.lead_gen.saved_searches.routes.model.to_response")
     def test_create_saved_search_accepts_query_from_lead_gen_workflow(self, to_response, create_saved_search):
         create_saved_search.return_value = {"_id": "saved-2"}
         to_response.return_value = {
@@ -72,8 +72,8 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
             location=None,
         )
 
-    @patch("app.lead_gen.saved_searches.routes.pipeline.create_saved_search")
-    @patch("app.lead_gen.saved_searches.routes.model.to_response")
+    @patch("app.projects.lead_gen.saved_searches.routes.pipeline.create_saved_search")
+    @patch("app.projects.lead_gen.saved_searches.routes.model.to_response")
     def test_create_saved_search_returns_serialized_response(self, to_response, create_saved_search):
         create_saved_search.return_value = {"_id": "saved-1"}
         to_response.return_value = {
@@ -105,8 +105,8 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
             location="Mumbai",
         )
 
-    @patch("app.lead_gen.saved_searches.routes.pipeline.list_saved_searches")
-    @patch("app.lead_gen.saved_searches.routes.model.to_response")
+    @patch("app.projects.lead_gen.saved_searches.routes.pipeline.list_saved_searches")
+    @patch("app.projects.lead_gen.saved_searches.routes.model.to_response")
     def test_list_saved_searches_returns_user_items(self, to_response, list_saved_searches):
         list_saved_searches.return_value = [{"_id": "saved-1"}]
         to_response.return_value = {
@@ -130,7 +130,7 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["count"], 1)
         list_saved_searches.assert_called_once_with("user-1", limit=5)
 
-    @patch("app.lead_gen.saved_searches.routes.pipeline.delete_saved_search")
+    @patch("app.projects.lead_gen.saved_searches.routes.pipeline.delete_saved_search")
     def test_delete_saved_search_returns_success_message(self, delete_saved_search):
         delete_saved_search.return_value = {"message": "Saved search deleted"}
 
@@ -145,7 +145,7 @@ class SavedSearchRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json(), {"message": "Saved search deleted"})
         delete_saved_search.assert_called_once_with("saved-1", "user-1")
 
-    @patch("app.lead_gen.saved_searches.routes.pipeline.delete_saved_search")
+    @patch("app.projects.lead_gen.saved_searches.routes.pipeline.delete_saved_search")
     def test_delete_saved_search_returns_not_found_error(self, delete_saved_search):
         from app.core.exceptions import NotFoundError
 
@@ -171,7 +171,7 @@ class SavedSearchModelTestCase(unittest.TestCase):
         mock_result = MagicMock()
         mock_result.deleted_count = 0
 
-        with patch("app.lead_gen.saved_searches.pipeline.model.delete_for_user", return_value=mock_result):
+        with patch("app.projects.lead_gen.saved_searches.pipeline.model.delete_for_user", return_value=mock_result):
             with self.assertRaises(NotFoundError):
                 pipeline.delete_saved_search("saved-1", "user-1")
 

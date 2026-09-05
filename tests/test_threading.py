@@ -21,10 +21,10 @@ class TestThreading(unittest.TestCase):
         },
         clear=False,
     )
-    @patch("app.lead_gen.jobs.scraping.maps.sync_playwright")
-    @patch("app.lead_gen.jobs.scraping.maps.jobs_model")
-    @patch("app.lead_gen.jobs.scraping.maps.leads_model")
-    @patch("app.lead_gen.jobs.scraping.maps.get_collection")
+    @patch("app.projects.lead_gen.jobs.scraping.maps.sync_playwright")
+    @patch("app.projects.lead_gen.jobs.scraping.maps.jobs_model")
+    @patch("app.projects.lead_gen.jobs.scraping.maps.leads_model")
+    @patch("app.projects.lead_gen.jobs.scraping.maps.get_collection")
     def test_concurrency_speed(self, mock_get_collection, mock_leads, mock_jobs, mock_playwright):
         if ROOT_DIR not in sys.path:
             sys.path.insert(0, ROOT_DIR)
@@ -42,7 +42,7 @@ class TestThreading(unittest.TestCase):
         mock_jobs.find_by_id.return_value = mock_job
         mock_get_collection.return_value.find_one.return_value = None
 
-        with patch("app.lead_gen.jobs.scraping.maps.EmailExtractor") as mock_email_extractor:
+        with patch("app.projects.lead_gen.jobs.scraping.maps.EmailExtractor") as mock_email_extractor:
             mock_extractor = mock_email_extractor.return_value
 
             def slow_extract(url):

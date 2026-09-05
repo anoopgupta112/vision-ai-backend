@@ -6,7 +6,7 @@ from app.projects.lead_gen.jobs import model as jobs_model, pipeline
 
 
 class JobRetryPipelineTestCase(unittest.TestCase):
-    @patch("app.lead_gen.jobs.pipeline.model.find_by_id")
+    @patch("app.projects.lead_gen.jobs.pipeline.model.find_by_id")
     def test_retry_user_job_rejects_non_failed_jobs(self, find_by_id):
         find_by_id.return_value = {
             "_id": "job-1",
@@ -19,7 +19,7 @@ class JobRetryPipelineTestCase(unittest.TestCase):
 
         self.assertEqual(str(error.exception), "Cannot retry job in current status")
 
-    @patch("app.lead_gen.jobs.pipeline.model.find_by_id")
+    @patch("app.projects.lead_gen.jobs.pipeline.model.find_by_id")
     def test_retry_job_raises_not_found_for_missing_job(self, find_by_id):
         find_by_id.return_value = None
 
@@ -28,10 +28,10 @@ class JobRetryPipelineTestCase(unittest.TestCase):
 
         self.assertEqual(str(error.exception), "Job not found")
 
-    @patch("app.lead_gen.jobs.pipeline.queue.enqueue")
-    @patch("app.lead_gen.jobs.pipeline.model.find_by_id")
-    @patch("app.lead_gen.jobs.pipeline.model.reset_for_retry")
-    @patch("app.lead_gen.jobs.pipeline.leads_model.delete_by_job")
+    @patch("app.projects.lead_gen.jobs.pipeline.queue.enqueue")
+    @patch("app.projects.lead_gen.jobs.pipeline.model.find_by_id")
+    @patch("app.projects.lead_gen.jobs.pipeline.model.reset_for_retry")
+    @patch("app.projects.lead_gen.jobs.pipeline.leads_model.delete_by_job")
     @patch("worker.process_extraction_job")
     def test_retry_job_resets_failed_job_and_requeues_worker(
         self,

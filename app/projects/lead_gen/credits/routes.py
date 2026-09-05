@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.core.middleware import auth_required, get_current_user
+from app.core.email_classifier import is_company_email
 from app.projects.lead_gen.credits import model, pipeline
 from app.projects.lead_gen import credit_requests
 
@@ -28,26 +29,68 @@ def get_history():
 @bp.route('/request', methods=['POST'])
 @auth_required
 def request_credits():
-    """Request free credits (requires admin approval)"""
+    """
+    Request free credits:
+    - Automatically approved immediately for verified company/business email domains.
+    - Requires admin approval for public/consumer/disposable email domains.
+    """
     user = get_current_user()
     data = request.get_json() or {}
     
     reason = data.get('reason', 'First-time credit request')
+    user_id_str = str(user['_id'])
+    user_email = user.get('email', '')
     
-    # Create credit request
-    req = credit_requests.create_request(
-        user_id=str(user['_id']),
-        amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
-        reason=reason
-    )
+    # 1. Prevent duplicate pending requests
+    if credit_requests.has_pending_request(user_id_str):
+        return jsonify({'error': 'You already have a pending credit request awaiting approval.'}), 400
     
-    if not req:
-        return jsonify({'error': 'You already have a pending credit request'}), 400
+    # 2. Prevent claiming free credits multiple times
+    if credit_requests.has_approved_request(user_id_str):
+        return jsonify({'error': 'You have already received your initial free credits.'}), 400
     
-    return jsonify({
-        'message': f'Credit request for {credit_requests.DEFAULT_CREDIT_AMOUNT} credits submitted',
-        'request': credit_requests.to_response(req, user['email'])
-    }), 201
+    is_company, domain = is_company_email(user_email)
+    
+    if is_company:
+        # Auto-approve for company domain
+        req = credit_requests.create_auto_approved_request(
+            user_id=user_id_str,
+            amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
+            reason=reason,
+            domain=domain
+        )
+        
+        # Credit user's ledger immediately
+        pipeline.add_credits(
+            user_id=user_id_str,
+            amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
+            reason=model.REASON_ADMIN,
+            note=f"Auto-approved free credits for company domain: {domain}"
+        )
+        new_balance = pipeline.get_user_balance(user_id_str)
+        
+        return jsonify({
+            'message': f'Credit request for {credit_requests.DEFAULT_CREDIT_AMOUNT} credits was automatically approved for your company account ({domain})!',
+            'auto_approved': True,
+            'balance': new_balance,
+            'request': credit_requests.to_response(req, user_email)
+        }), 201
+    else:
+        # Public/consumer email -> create pending request for admin approval
+        req = credit_requests.create_request(
+            user_id=user_id_str,
+            amount=credit_requests.DEFAULT_CREDIT_AMOUNT,
+            reason=reason
+        )
+        
+        if not req:
+            return jsonify({'error': 'You already have a pending credit request'}), 400
+        
+        return jsonify({
+            'message': f'Credit request for {credit_requests.DEFAULT_CREDIT_AMOUNT} credits submitted. Awaiting admin approval.',
+            'auto_approved': False,
+            'request': credit_requests.to_response(req, user_email)
+        }), 201
 
 @bp.route('/requests', methods=['GET'])
 @auth_required

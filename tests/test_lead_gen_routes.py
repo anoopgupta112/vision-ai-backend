@@ -69,8 +69,8 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Maximum 500 leads per job"})
 
-    @patch("app.lead_gen.jobs.routes.pipeline.create_job")
-    @patch("app.lead_gen.jobs.routes.model.to_response")
+    @patch("app.projects.lead_gen.jobs.routes.pipeline.create_job")
+    @patch("app.projects.lead_gen.jobs.routes.model.to_response")
     def test_create_job_returns_serialized_job(self, to_response, create_job):
         create_job.return_value = {"_id": "job-1"}
         to_response.return_value = {
@@ -93,8 +93,8 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["job"]["id"], "job-1")
         create_job.assert_called_once_with("user-1", "plumbers in mumbai", 10)
 
-    @patch("app.lead_gen.jobs.routes.model.find_by_user")
-    @patch("app.lead_gen.jobs.routes.model.to_response")
+    @patch("app.projects.lead_gen.jobs.routes.model.find_by_user")
+    @patch("app.projects.lead_gen.jobs.routes.model.to_response")
     def test_list_jobs_uses_current_user_and_pagination(self, to_response, find_by_user):
         find_by_user.return_value = [{"_id": "job-1"}, {"_id": "job-2"}]
         to_response.side_effect = [
@@ -114,8 +114,8 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["jobs"][0]["id"], "job-1")
         find_by_user.assert_called_once_with("user-1", 2, 5)
 
-    @patch("app.lead_gen.jobs.routes.pipeline.retry_user_job")
-    @patch("app.lead_gen.jobs.routes.model.to_response")
+    @patch("app.projects.lead_gen.jobs.routes.pipeline.retry_user_job")
+    @patch("app.projects.lead_gen.jobs.routes.model.to_response")
     def test_retry_job_returns_serialized_job(self, to_response, retry_user_job):
         retry_user_job.return_value = {"_id": "job-1"}
         to_response.return_value = {
@@ -138,7 +138,7 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["job"]["status"], "queued")
         retry_user_job.assert_called_once_with("job-1", "user-1")
 
-    @patch("app.lead_gen.leads.routes.pipeline.get_leads_for_job")
+    @patch("app.projects.lead_gen.leads.routes.pipeline.get_leads_for_job")
     def test_get_leads_by_job_returns_website_actions(self, get_leads_for_job):
         get_leads_for_job.return_value = [
             {
@@ -176,7 +176,7 @@ class LeadGenRoutesTestCase(unittest.TestCase):
         )
         get_leads_for_job.assert_called_once_with("job-1", "user-1", 25, 10)
 
-    @patch("app.lead_gen.leads.routes.pipeline.get_leads_for_job")
+    @patch("app.projects.lead_gen.leads.routes.pipeline.get_leads_for_job")
     def test_download_csv_returns_expected_headers_and_rows(self, get_leads_for_job):
         get_leads_for_job.return_value = [
             {

@@ -13,6 +13,54 @@ STATUS_REJECTED = 'rejected'
 
 DEFAULT_CREDIT_AMOUNT = 50
 
+SYSTEM_AUTO_APPROVAL = 'system_auto_approval'
+
+def has_pending_request(user_id: str) -> bool:
+    """Check if user has any pending credit request"""
+    coll = get_collection(COLLECTION)
+    uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+    return coll.count_documents({'user_id': uid, 'status': STATUS_PENDING}) > 0
+
+def has_approved_request(user_id: str) -> bool:
+    """Check if user already had an approved free credit request"""
+    coll = get_collection(COLLECTION)
+    uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+    return coll.count_documents({'user_id': uid, 'status': STATUS_APPROVED}) > 0
+
+def create_auto_approved_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOUNT, reason: str = None, domain: str = None) -> dict:
+    """
+    Create an automatically approved credit request for verified business/company domain
+    
+    Args:
+        user_id: ID of the user requesting credits
+        amount: Number of credits granted
+        reason: Optional reason for the request
+        domain: Domain of the company email
+        
+    Returns:
+        Created approved request document
+    """
+    coll = get_collection(COLLECTION)
+    uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+    now = datetime.utcnow()
+    
+    admin_note = f"Auto-approved for verified company domain: {domain}" if domain else "Auto-approved for company email"
+    
+    doc = {
+        'user_id': uid,
+        'amount': amount,
+        'reason': reason,
+        'status': STATUS_APPROVED,
+        'admin_note': admin_note,
+        'processed_by': SYSTEM_AUTO_APPROVAL,
+        'created_at': now,
+        'processed_at': now
+    }
+    
+    result = coll.insert_one(doc)
+    doc['_id'] = result.inserted_id
+    return doc
+
 def create_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOUNT, reason: str = None) -> dict:
     """
     Create a new credit request
@@ -26,10 +74,11 @@ def create_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOUNT, reason: st
         Created request document
     """
     coll = get_collection(COLLECTION)
+    uid = ObjectId(user_id) if isinstance(user_id, str) else user_id
     
     # Check if user already has a pending request
     existing = coll.find_one({
-        'user_id': ObjectId(user_id) if isinstance(user_id, str) else user_id,
+        'user_id': uid,
         'status': STATUS_PENDING
     })
     
@@ -37,7 +86,7 @@ def create_request(user_id: str, amount: int = DEFAULT_CREDIT_AMOUNT, reason: st
         return None  # Already has pending request
     
     doc = {
-        'user_id': ObjectId(user_id) if isinstance(user_id, str) else user_id,
+        'user_id': uid,
         'amount': amount,
         'reason': reason,
         'status': STATUS_PENDING,
