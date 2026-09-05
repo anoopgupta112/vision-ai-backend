@@ -1,5 +1,6 @@
 import os
 import io
+import logging
 from datetime import datetime
 from typing import Any, Dict, List
 from uuid import uuid4
@@ -9,6 +10,8 @@ from flask import current_app
 from werkzeug.utils import secure_filename
 
 from app.core.database import get_collection
+
+logger = logging.getLogger(__name__)
 
 
 def _forms_collection():
@@ -164,28 +167,36 @@ def _prepare_excel_rows(submissions: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 
 def export_to_excel_bytes(form_id: str) -> bytes:
-    """Generates the Excel export directly in memory as bytes (0 VPS disk usage)."""
-    try:
-        import pandas as pd
-    except ImportError as exc:
-        raise RuntimeError("pandas is not installed.") from exc
-
+    """Generates the styled Excel export directly in memory as bytes (0 VPS disk usage)."""
     submissions = get_form_submissions(form_id)
     if not submissions:
         raise FileNotFoundError("No submissions found.")
 
     clean_rows = _prepare_excel_rows(submissions)
-    output = io.BytesIO()
-    pd.DataFrame(clean_rows).to_excel(output, index=False)
-    return output.getvalue()
+    form = _forms_collection().find_one({"form_id": form_id})
+    form_name = (form.get("name") or f"Form {form_id}").strip() if form else f"Form {form_id}"
+
+    try:
+        from app.core import excel_styler
+        return excel_styler.create_styled_excel(
+            rows=clean_rows,
+            title=f"{form_name} — Candidate Intelligence Report",
+            sheet_name="Candidates",
+            subtitle=f"Generated: {datetime.utcnow().strftime('%b %d, %Y %H:%M UTC')} • {len(clean_rows)} Candidates Evaluated • AI Resume Intelligence",
+        )
+    except Exception as exc:
+        logger.debug("Falling back to pandas for excel export: %s", exc)
+        try:
+            import pandas as pd
+        except ImportError as e:
+            raise RuntimeError("pandas or openpyxl is required for Excel export.") from e
+        output = io.BytesIO()
+        pd.DataFrame(clean_rows).to_excel(output, index=False)
+        return output.getvalue()
 
 
 def export_to_excel(form_id: str) -> str:
-    try:
-        import pandas as pd
-    except ImportError as exc:
-        raise RuntimeError("pandas is not installed.") from exc
-
+    """Generates and writes styled Excel to local export path."""
     submissions = get_form_submissions(form_id)
     if not submissions:
         raise FileNotFoundError("No submissions found.")
@@ -193,7 +204,25 @@ def export_to_excel(form_id: str) -> str:
     os.makedirs(export_dir, exist_ok=True)
     export_path = os.path.join(export_dir, f"{form_id}_data.xlsx")
     clean_rows = _prepare_excel_rows(submissions)
-    pd.DataFrame(clean_rows).to_excel(export_path, index=False)
+    form = _forms_collection().find_one({"form_id": form_id})
+    form_name = (form.get("name") or f"Form {form_id}").strip() if form else f"Form {form_id}"
+
+    try:
+        from app.core import excel_styler
+        excel_styler.save_styled_excel(
+            rows=clean_rows,
+            file_path=export_path,
+            title=f"{form_name} — Candidate Intelligence Report",
+            sheet_name="Candidates",
+            subtitle=f"Generated: {datetime.utcnow().strftime('%b %d, %Y %H:%M UTC')} • {len(clean_rows)} Candidates Evaluated • AI Resume Intelligence",
+        )
+    except Exception as exc:
+        logger.debug("Falling back to pandas for excel export: %s", exc)
+        try:
+            import pandas as pd
+        except ImportError as e:
+            raise RuntimeError("pandas or openpyxl is required for Excel export.") from e
+        pd.DataFrame(clean_rows).to_excel(export_path, index=False)
     return export_path
 
 
