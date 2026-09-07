@@ -145,12 +145,12 @@ def get_submission_documents(form_id: str, submission_ids=None):
 
 
 def _prepare_excel_rows(submissions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Cleans submission data for Excel export: formats file fields as Google Drive URLs."""
+    """Cleans submission data for Excel export: formats file fields as Google Drive URLs or clean display strings."""
     rows = []
     for sub in submissions:
         clean_row = {}
         for k, v in sub.items():
-            if k == "id":
+            if k == "id" or k == "_id":
                 continue
             if isinstance(v, dict):
                 # Format uploaded files as Google Drive direct link or clean file name
@@ -158,8 +158,44 @@ def _prepare_excel_rows(submissions: List[Dict[str, Any]]) -> List[Dict[str, Any
                     clean_row[k] = v["drive_url"]
                 elif v.get("name"):
                     clean_row[k] = v["name"]
+                elif v.get("path"):
+                    clean_row[k] = os.path.basename(v["path"])
+                elif v.get("url"):
+                    clean_row[k] = v["url"]
                 else:
                     clean_row[k] = str(v)
+            elif isinstance(v, str) and v.strip().startswith("{") and ("name" in v or "path" in v or "drive_url" in v or "url" in v):
+                # Handle stringified dicts gracefully if present in database rows
+                try:
+                    import ast, json
+                    try:
+                        parsed = ast.literal_eval(v)
+                    except Exception:
+                        parsed = json.loads(v)
+                    if isinstance(parsed, dict):
+                        if parsed.get("drive_url"):
+                            clean_row[k] = parsed["drive_url"]
+                        elif parsed.get("name"):
+                            clean_row[k] = parsed["name"]
+                        elif parsed.get("path"):
+                            clean_row[k] = os.path.basename(parsed["path"])
+                        elif parsed.get("url"):
+                            clean_row[k] = parsed["url"]
+                        else:
+                            clean_row[k] = str(parsed)
+                    else:
+                        clean_row[k] = v
+                except Exception:
+                    clean_row[k] = v
+            elif isinstance(v, list):
+                # Format lists cleanly (e.g. multi-select items or multiple files)
+                items = []
+                for item in v:
+                    if isinstance(item, dict):
+                        items.append(item.get("name") or item.get("drive_url") or str(item))
+                    else:
+                        items.append(str(item))
+                clean_row[k] = ", ".join(items)
             else:
                 clean_row[k] = v
         rows.append(clean_row)

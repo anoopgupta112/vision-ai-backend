@@ -1,11 +1,11 @@
 import io
 import re
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import openpyxl
-    from openpyxl.chart import BarChart, DoughnutChart, PieChart, Reference
+    from openpyxl.chart import BarChart, DoughnutChart, Reference
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 except ImportError:
@@ -37,6 +37,11 @@ def _parse_score(val: Any) -> Optional[float]:
     """Helper to safely extract float percentage (0..100) from string/number."""
     if val is None:
         return None
+    if isinstance(val, (int, float)):
+        num = float(val)
+        if 0.0 <= num <= 1.0:
+            num = num * 100.0
+        return num
     val_str = str(val).strip()
     if not val_str:
         return None
@@ -45,11 +50,37 @@ def _parse_score(val: Any) -> Optional[float]:
         if not cleaned:
             return None
         num = float(cleaned)
-        if num <= 1.0 and "%" in val_str:
+        if num <= 1.0:
             num = num * 100.0
         return num
     except Exception:
         return None
+
+
+def _parse_date(val: Any) -> Optional[datetime]:
+    """Safely parses string or datetime object into a datetime instance."""
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, date):
+        return datetime(val.year, val.month, val.day)
+    if isinstance(val, str):
+        v = val.strip()
+        if not v:
+            return None
+        v_clean = v[:-1] if v.endswith("Z") else v
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%m/%d/%Y",
+        ):
+            try:
+                return datetime.strptime(v_clean, fmt)
+            except ValueError:
+                pass
+    return None
 
 
 def create_styled_excel(
@@ -68,7 +99,7 @@ def create_styled_excel(
         raise RuntimeError("openpyxl is required for styled Excel generation.")
 
     wb = openpyxl.Workbook()
-    
+
     # -------------------------------------------------------------
     # STYLES DEFINITION (Linear Executive Theme)
     # -------------------------------------------------------------
@@ -119,13 +150,14 @@ def create_styled_excel(
         bottom=Side(style="medium", color="0F172A"),
     )
 
-    align_center = Alignment(horizontal="center", vertical="center", wrap_text=False)
-    align_left = Alignment(horizontal="left", vertical="center", wrap_text=False)
-    align_right = Alignment(horizontal="right", vertical="center", wrap_text=False)
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    align_right = Alignment(horizontal="right", vertical="center")
 
     if not rows:
         ws = wb.active
         ws.title = "Overview"
+        ws.views.sheetView[0].showGridLines = True
         ws.append(["No records found."])
         output = io.BytesIO()
         wb.save(output)
@@ -135,9 +167,13 @@ def create_styled_excel(
     if not headers:
         key_dict = {}
         for r in rows:
-            for k in r.keys():
-                key_dict[k] = None
+            if isinstance(r, dict):
+                for k in r.keys():
+                    if k not in ("_id", "id"):
+                        key_dict[k] = None
         headers = list(key_dict.keys())
+        if not headers and rows:
+            headers = ["Value"]
 
     # Calculate metrics
     scores = []
@@ -152,24 +188,20 @@ def create_styled_excel(
     low_count = 0
     total_count = len(rows)
 
-    for r in rows:
-        val = r.get(score_col_name) if score_col_name else None
-        num = _parse_score(val)
-        if num is not None:
-            scores.append(num)
-            if num >= 80:
-                high_count += 1
-            elif num >= 50:
-                med_count += 1
-            else:
-                low_count += 1
+    if score_col_name:
+        for r in rows:
+            val = r.get(score_col_name) if isinstance(r, dict) else None
+            num = _parse_score(val)
+            if num is not None:
+                scores.append(num)
+                if num >= 80:
+                    high_count += 1
+                elif num >= 50:
+                    med_count += 1
+                else:
+                    low_count += 1
 
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
-    if not scores:
-        high_count = total_count
-        med_count = 0
-        low_count = 0
-
     now_str = datetime.utcnow().strftime("%b %d, %Y %H:%M UTC")
 
     # =============================================================
@@ -193,7 +225,8 @@ def create_styled_excel(
 
         ws_dash.row_dimensions[2].height = 24
         ws_dash.merge_cells(start_row=2, start_column=1, end_row=2, end_column=dash_cols)
-        s_cell = ws_dash.cell(row=2, column=1, value=f"  Generated on {now_str} • {total_count} Total Evaluated • AI Semantic Intelligence Engine")
+        sub_text = subtitle or f"Generated on {now_str} • {total_count} Total Records • AI Intelligence Engine"
+        s_cell = ws_dash.cell(row=2, column=1, value=f"  {sub_text}")
         s_cell.font = sub_font
         s_cell.fill = sub_fill
         s_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
@@ -203,17 +236,23 @@ def create_styled_excel(
         # Row 3: Spacer
         ws_dash.row_dimensions[3].height = 10
 
-        # 2. KPI Summary Cards (Rows 4-5)
-        # Card 1: Total Candidates (Cols B-D)
-        # Card 2: Top Fit Shortlist (Cols E-G)
-        # Card 3: Avg Fit Score (Cols H-J)
-        # Card 4: Qualified Share (Cols K-M)
-        kpi_defs = [
-            ("TOTAL EVALUATED", f"{total_count}", card_val_indigo, 2, 4),
-            ("SHORTLISTED (≥80%)", f"{high_count}", card_val_emerald, 5, 7),
-            ("AVERAGE FIT SCORE", f"{avg_score}%" if scores else "N/A", card_val_violet, 8, 10),
-            ("TOP FIT RATIO", f"{round((high_count/max(total_count, 1))*100, 1)}%", card_val_amber, 11, 13),
-        ]
+        # KPI Summary Cards (Rows 4-5)
+        if scores:
+            kpi_defs = [
+                ("TOTAL EVALUATED", f"{total_count}", card_val_indigo, 2, 4),
+                ("SHORTLISTED (≥80%)", f"{high_count}", card_val_emerald, 5, 7),
+                ("AVERAGE FIT SCORE", f"{avg_score}%", card_val_violet, 8, 10),
+                ("TOP FIT RATIO", f"{round((high_count/max(total_count, 1))*100, 1)}%", card_val_amber, 11, 13),
+            ]
+        else:
+            with_email = sum(1 for r in rows if isinstance(r, dict) and r.get("email"))
+            with_phone = sum(1 for r in rows if isinstance(r, dict) and r.get("phone"))
+            kpi_defs = [
+                ("TOTAL RECORDS", f"{total_count}", card_val_indigo, 2, 4),
+                ("WITH EMAIL", f"{with_email}", card_val_emerald, 5, 7),
+                ("WITH PHONE", f"{with_phone}", card_val_violet, 8, 10),
+                ("TOTAL FIELDS", f"{len(headers)}", card_val_amber, 11, 13),
+            ]
 
         ws_dash.row_dimensions[4].height = 18
         ws_dash.row_dimensions[5].height = 32
@@ -223,80 +262,86 @@ def create_styled_excel(
             lbl_cell = ws_dash.cell(row=4, column=sc, value=label)
             lbl_cell.fill = card_header_fill
             lbl_cell.font = card_header_font
-            lbl_cell.alignment = align_center
+            lbl_cell.alignment = Alignment(horizontal="center", vertical="center")
 
             ws_dash.merge_cells(start_row=5, start_column=sc, end_row=5, end_column=ec)
             val_cell = ws_dash.cell(row=5, column=sc, value=val)
             val_cell.fill = card_body_fill
             val_cell.font = font
-            val_cell.alignment = align_center
+            val_cell.alignment = Alignment(horizontal="center", vertical="center")
 
             for r in [4, 5]:
                 for c in range(sc, ec + 1):
                     ws_dash.cell(row=r, column=c).border = thin_border
 
-        # 3. Chart Data Source (Hidden table on Col Z)
-        ws_dash.cell(row=8, column=25, value="Category")
-        ws_dash.cell(row=8, column=26, value="Count")
-        ws_dash.cell(row=9, column=25, value="Top Fit (≥80%)")
-        ws_dash.cell(row=9, column=26, value=high_count)
-        ws_dash.cell(row=10, column=25, value="Moderate (50-79%)")
-        ws_dash.cell(row=10, column=26, value=med_count)
-        ws_dash.cell(row=11, column=25, value="Low Fit (<50%)")
-        ws_dash.cell(row=11, column=26, value=low_count)
+        if scores:
+            # Chart Data Source (Hidden table on Col Z)
+            ws_dash.cell(row=8, column=25, value="Category")
+            ws_dash.cell(row=8, column=26, value="Count")
+            ws_dash.cell(row=9, column=25, value="Top Fit (≥80%)")
+            ws_dash.cell(row=9, column=26, value=high_count)
+            ws_dash.cell(row=10, column=25, value="Moderate (50-79%)")
+            ws_dash.cell(row=10, column=26, value=med_count)
+            ws_dash.cell(row=11, column=25, value="Low Fit (<50%)")
+            ws_dash.cell(row=11, column=26, value=low_count)
 
-        # 4. Embedded Bar Chart
-        bar_chart = BarChart()
-        bar_chart.type = "col"
-        bar_chart.style = 10
-        bar_chart.title = "Candidate Fit Score Distribution"
-        bar_chart.y_axis.title = "Candidates"
-        bar_chart.x_axis.title = "Tier"
-        data_ref = Reference(ws_dash, min_col=26, min_row=8, max_row=11)
-        cats_ref = Reference(ws_dash, min_col=25, min_row=9, max_row=11)
-        bar_chart.add_data(data_ref, titles_from_data=True)
-        bar_chart.set_categories(cats_ref)
-        bar_chart.width = 14
-        bar_chart.height = 9.5
-        bar_chart.legend = None
-        ws_dash.add_chart(bar_chart, "B7")
+            # Bar Chart
+            bar_chart = BarChart()
+            bar_chart.type = "col"
+            bar_chart.style = 10
+            bar_chart.title = "Score Distribution Breakdown"
+            bar_chart.y_axis.title = "Count"
+            bar_chart.x_axis.title = "Tier"
+            data_ref = Reference(ws_dash, min_col=26, min_row=8, max_row=11)
+            cats_ref = Reference(ws_dash, min_col=25, min_row=9, max_row=11)
+            bar_chart.add_data(data_ref, titles_from_data=True)
+            bar_chart.set_categories(cats_ref)
+            bar_chart.width = 14
+            bar_chart.height = 9.5
+            bar_chart.legend = None
+            ws_dash.add_chart(bar_chart, "B7")
 
-        # 5. Embedded Doughnut / Pie Chart
-        pie_chart = DoughnutChart()
-        pie_chart.title = "Applicant Pool Breakdown"
-        pie_chart.style = 2
-        pie_chart.add_data(data_ref, titles_from_data=True)
-        pie_chart.set_categories(cats_ref)
-        pie_chart.width = 12
-        pie_chart.height = 9.5
-        ws_dash.add_chart(pie_chart, "I7")
+            # Doughnut Chart
+            pie_chart = DoughnutChart()
+            pie_chart.title = "Tier Breakdown"
+            pie_chart.style = 2
+            pie_chart.add_data(data_ref, titles_from_data=True)
+            pie_chart.set_categories(cats_ref)
+            pie_chart.width = 12
+            pie_chart.height = 9.5
+            ws_dash.add_chart(pie_chart, "I7")
 
-        # 6. Top 5 Star Candidates Table (Row 24)
-        top_start_row = 24
+        # Top Records Table
+        top_start_row = 24 if scores else 7
         ws_dash.row_dimensions[top_start_row].height = 28
         ws_dash.merge_cells(start_row=top_start_row, start_column=2, end_row=top_start_row, end_column=13)
-        star_title = ws_dash.cell(row=top_start_row, column=2, value="⭐ TOP SHORTLISTED CANDIDATES")
+        star_title = ws_dash.cell(row=top_start_row, column=2, value="⭐ FEATURED HIGHLIGHTS & TOP RECORDS")
         star_title.font = header_font
         star_title.fill = header_fill
         star_title.alignment = Alignment(horizontal="left", vertical="center", indent=1)
         for c in range(3, 14):
             ws_dash.cell(row=top_start_row, column=c).fill = header_fill
 
-        # Sort top 5 rows
         sorted_rows = list(rows)
         if score_col_name:
-            sorted_rows.sort(key=lambda r: _parse_score(r.get(score_col_name)) or 0, reverse=True)
+            def _get_sort_score(r):
+                if not isinstance(r, dict):
+                    return -1.0
+                val = r.get(score_col_name)
+                parsed = _parse_score(val)
+                return parsed if parsed is not None else -1.0
+            sorted_rows.sort(key=_get_sort_score, reverse=True)
         top_5 = sorted_rows[:5]
 
-        # Top 5 headers (Col B to G)
-        top_headers = ["Rank", "Candidate Name", "Email", "Fit Score", "Resume File", "GitHub / Link"]
+        display_cols = [h for h in headers if not any(x in h.lower() for x in ["_id", "id"])][:5]
+        top_headers = ["Rank"] + [h.replace("_", " ").title() for h in display_cols]
         th_row = top_start_row + 1
         ws_dash.row_dimensions[th_row].height = 24
         for idx, th in enumerate(top_headers, start=2):
             cell = ws_dash.cell(row=th_row, column=idx, value=th)
             cell.font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
-            cell.alignment = align_center if idx in [2, 5, 6, 7] else align_left
+            cell.alignment = Alignment(horizontal="center" if idx in (2, 5) else "left", vertical="center")
             cell.border = header_border
 
         curr_top_row = th_row + 1
@@ -305,97 +350,67 @@ def create_styled_excel(
             is_odd = (rank_idx % 2 == 1)
             b_fill = row_fill_b if is_odd else row_fill_a
 
-            # Rank
             c_rank = ws_dash.cell(row=curr_top_row, column=2, value=f"#{rank_idx:02d}")
             c_rank.fill = b_fill
-            c_rank.alignment = align_center
+            c_rank.alignment = Alignment(horizontal="center", vertical="center")
             c_rank.border = thin_border
             c_rank.font = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
 
-            # Name
-            name_val = r.get("name") or r.get("full_name") or "Candidate"
-            c_name = ws_dash.cell(row=curr_top_row, column=3, value=str(name_val))
-            c_name.fill = b_fill
-            c_name.alignment = align_left
-            c_name.border = thin_border
-            c_name.font = regular_font
+            for col_i, orig_col in enumerate(display_cols, start=3):
+                val = r.get(orig_col, "") if isinstance(r, dict) else ""
+                cell = ws_dash.cell(row=curr_top_row, column=col_i)
+                cell.fill = b_fill
+                cell.border = thin_border
 
-            # Email
-            email_val = r.get("email") or ""
-            c_email = ws_dash.cell(row=curr_top_row, column=4, value=str(email_val))
-            c_email.fill = b_fill
-            c_email.alignment = align_left
-            c_email.border = thin_border
-            c_email.font = regular_font
+                val_str = str(val).strip() if val is not None else ""
+                if isinstance(val_str, str) and (val_str.startswith("http://") or val_str.startswith("https://")):
+                    cell.value = _format_cell_link(val_str, orig_col)
+                    cell.font = link_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    s_num = _parse_score(val_str) if score_col_name and orig_col == score_col_name else None
+                    orig_h_lower = orig_col.lower()
+                    is_dash_date_col = any(k in orig_h_lower for k in ["date", "created", "time", "submitted", "timestamp", "updated"]) or orig_h_lower.endswith("_at")
+                    dt_dash_obj = _parse_date(val) if is_dash_date_col else None
 
-            # Score
-            score_val = r.get(score_col_name, "") if score_col_name else "100%"
-            s_num = _parse_score(score_val)
-            c_score = ws_dash.cell(row=curr_top_row, column=5)
-            c_score.border = thin_border
-            c_score.alignment = align_center
-            if s_num and s_num >= 80:
-                c_score.value = f"🟢 {int(s_num)}%"
-                c_score.fill = badge_high_fill
-                c_score.font = badge_high_font
-            elif s_num and s_num >= 50:
-                c_score.value = f"🟡 {int(s_num)}%"
-                c_score.fill = badge_med_fill
-                c_score.font = badge_med_font
-            else:
-                c_score.value = f"{score_val}"
-                c_score.fill = b_fill
-                c_score.font = regular_font
-
-            # Resume Link
-            res_val = None
-            for k, v in r.items():
-                if any(x in k.lower() for x in ["resume", "pdf", "drive_url"]):
-                    res_val = str(v)
-                    break
-            c_res = ws_dash.cell(row=curr_top_row, column=6)
-            c_res.fill = b_fill
-            c_res.border = thin_border
-            if res_val and res_val.startswith("http"):
-                c_res.value = _format_cell_link(res_val, "resume")
-                c_res.font = link_font
-                c_res.alignment = align_center
-            else:
-                c_res.value = "—"
-                c_res.alignment = align_center
-
-            # GitHub Link
-            gh_val = None
-            for k, v in r.items():
-                if any(x in k.lower() for x in ["github", "repo", "website"]):
-                    gh_val = str(v)
-                    break
-            c_gh = ws_dash.cell(row=curr_top_row, column=7)
-            c_gh.fill = b_fill
-            c_gh.border = thin_border
-            if gh_val and gh_val.startswith("http"):
-                c_gh.value = _format_cell_link(gh_val, "github")
-                c_gh.font = link_font
-                c_gh.alignment = align_center
-            else:
-                c_gh.value = "—"
-                c_gh.alignment = align_center
-
+                    if dt_dash_obj:
+                        cell.value = dt_dash_obj
+                        cell.number_format = "yyyy-mm-dd hh:mm"
+                        cell.font = regular_font
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    elif s_num is not None:
+                        if s_num >= 80:
+                            cell.value = f"🟢 {int(s_num)}%"
+                            cell.fill = badge_high_fill
+                            cell.font = badge_high_font
+                        elif s_num >= 50:
+                            cell.value = f"🟡 {int(s_num)}%"
+                            cell.fill = badge_med_fill
+                            cell.font = badge_med_font
+                        else:
+                            cell.value = f"🔴 {int(s_num)}%"
+                            cell.fill = badge_low_fill
+                            cell.font = badge_low_font
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    else:
+                        cell.value = val_str
+                        cell.font = regular_font
+                        cell.alignment = Alignment(horizontal="left", vertical="center")
             curr_top_row += 1
 
-        # Auto-width dashboard columns
         for col_i in range(1, 15):
             col_ltr = get_column_letter(col_i)
             ws_dash.column_dimensions[col_ltr].width = 18
 
-    # =============================================================
-    # SHEET 2: 👥 Full Master Data Grid
-    # =============================================================
-    ws_data = wb.create_sheet(title=f"👥 {sheet_name[:26]}")
+    if include_analytics_sheet:
+        ws_data = wb.create_sheet(title=f"👥 {sheet_name[:26]}")
+    else:
+        ws_data = wb.active
+        ws_data.title = f"👥 {sheet_name[:26]}"
     ws_data.views.sheetView[0].showGridLines = True
     total_cols = max(len(headers), 1)
 
-    # 1. Header Banner
+    # Header Banner
     ws_data.row_dimensions[1].height = 36
     ws_data.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
     title_cell = ws_data.cell(row=1, column=1, value=f"🚀 {title.upper()} — MASTER ROSTER")
@@ -409,7 +424,7 @@ def create_styled_excel(
     # Row 2: Subtitle
     ws_data.row_dimensions[2].height = 22
     ws_data.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_cols)
-    sub_cell = ws_data.cell(row=2, column=1, value=f"  Generated: {now_str} • {len(rows)} Total Records • Full Raw Dataset")
+    sub_cell = ws_data.cell(row=2, column=1, value=f"  Generated: {now_str} • {len(rows)} Total Records • Full Dataset Roster")
     sub_cell.font = sub_font
     sub_cell.fill = sub_fill
     sub_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
@@ -428,7 +443,11 @@ def create_styled_excel(
         cell = ws_data.cell(row=header_row_idx, column=col_idx, value=clean_header)
         cell.font = header_font
         cell.fill = header_fill
-        cell.alignment = align_center if any(k in header_name.lower() for k in ["score", "fit", "status", "link", "pdf", "date", "phone"]) else align_left
+        cell.alignment = Alignment(
+            horizontal="center" if any(k in header_name.lower() for k in ["score", "fit", "status", "link", "pdf", "date", "phone"]) else "left",
+            vertical="center",
+            wrap_text=True,
+        )
         cell.border = header_border
 
     # Data Rows
@@ -439,23 +458,30 @@ def create_styled_excel(
         base_fill = row_fill_b if is_odd else row_fill_a
 
         for col_idx, header_name in enumerate(headers, start=1):
-            val = data.get(header_name, "")
+            val = data.get(header_name, "") if isinstance(data, dict) else ""
             cell = ws_data.cell(row=current_row, column=col_idx)
             cell.border = thin_border
             cell.fill = base_fill
 
-            if isinstance(val, str) and (val.startswith("http://") or val.startswith("https://")):
-                cell.value = _format_cell_link(val, header_name)
-                cell.font = link_font
-                cell.alignment = align_center
-            else:
-                h_lower = header_name.lower()
-                val_str = str(val).strip() if val is not None else ""
+            h_lower = header_name.lower()
+            val_str = str(val).strip() if val is not None else ""
 
+            if isinstance(val_str, str) and (val_str.startswith("http://") or val_str.startswith("https://")):
+                cell.value = _format_cell_link(val_str, header_name)
+                cell.font = link_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
                 is_score_col = any(k in h_lower for k in ["score", "fit", "match", "rating", "percentage"])
                 score_num = _parse_score(val_str) if is_score_col else None
+                is_date_col = any(k in h_lower for k in ["date", "created", "time", "submitted", "timestamp", "updated"]) or h_lower.endswith("_at")
+                dt_obj = _parse_date(val) if is_date_col else None
 
-                if score_num is not None:
+                if dt_obj:
+                    cell.value = dt_obj
+                    cell.number_format = "yyyy-mm-dd hh:mm"
+                    cell.font = regular_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                elif score_num is not None:
                     if score_num >= 80:
                         cell.value = f"🟢 {val_str if '%' in val_str else f'{int(score_num)}%'}"
                         cell.fill = badge_high_fill
@@ -468,7 +494,7 @@ def create_styled_excel(
                         cell.value = f"🔴 {val_str if '%' in val_str else f'{int(score_num)}%'}"
                         cell.fill = badge_low_fill
                         cell.font = badge_low_font
-                    cell.alignment = align_center
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
                 elif any(k in h_lower for k in ["status", "tier"]):
                     val_upper = val_str.upper()
                     if any(w in val_upper for w in ["HIGH", "PASS", "ACCEPTED", "SHORTLIST", "S-TIER", "A-TIER"]):
@@ -486,27 +512,41 @@ def create_styled_excel(
                     else:
                         cell.value = val_str
                         cell.font = regular_font
-                    cell.alignment = align_center
-                else:
-                    cell.value = val if val is not None else ""
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                elif isinstance(val, (int, float)) and not isinstance(val, bool):
+                    cell.value = val
                     cell.font = regular_font
-                    cell.alignment = align_left if isinstance(val, str) else align_right
+                    cell.alignment = align_right
+                    if isinstance(val, int):
+                        cell.number_format = "#,##0"
+                    else:
+                        cell.number_format = "#,##0.00"
+                else:
+                    cell.value = val_str
+                    cell.font = regular_font
+                    cell.alignment = align_left if isinstance(val_str, str) else align_right
 
         current_row += 1
 
-    # Auto-fit column widths
+    # Auto-fit column widths with strict bounds (12 to 60)
     for col_idx, header_name in enumerate(headers, start=1):
         col_letter = get_column_letter(col_idx)
-        max_len = len(header_name.replace("_", " ")) + 4
+        clean_hdr = header_name.replace("_", " ").title()
+        max_len = len(clean_hdr) + 4
 
         for row in range(5, current_row):
             cell_val = str(ws_data.cell(row=row, column=col_idx).value or "")
             if cell_val.startswith("=HYPERLINK"):
-                max_len = max(max_len, 18)
+                m = re.search(r', "(.*?)"\)', cell_val)
+                lbl_len = len(m.group(1)) if m else 16
+                max_len = max(max_len, lbl_len + 4)
+            elif "\n" in cell_val:
+                lines = cell_val.split("\n")
+                max_len = max(max_len, max(len(l) for l in lines) + 4)
             else:
-                max_len = max(max_len, len(cell_val) + 3)
+                max_len = max(max_len, len(cell_val) + 4)
 
-        ws_data.column_dimensions[col_letter].width = min(max(max_len, 14), 50)
+        ws_data.column_dimensions[col_letter].width = min(max(max_len, 12), 60)
 
     # Enable AutoFilter and Freeze Panes on Master Sheet
     last_col_letter = get_column_letter(total_cols)
