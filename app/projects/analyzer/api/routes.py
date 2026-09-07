@@ -3,6 +3,7 @@ import os
 import re
 import tempfile
 import uuid
+from typing import Any, Dict, List, Optional, Union
 
 from flask import Blueprint, jsonify, request, render_template, send_file
 from werkzeug.utils import secure_filename
@@ -172,6 +173,31 @@ def _deduct_analyzer_credits(user_id: str, amount: int, note: str):
     if amount <= 0:
         return None
     return credits_pipeline.deduct_credits(user_id, amount, note=note)
+
+
+def _get_client_name_for_form(form: Dict[str, Any]) -> str:
+    """Resolves client organization/name for isolated Google Drive hierarchy."""
+    user_id = form.get("user_id")
+    if not user_id:
+        return "General Workspace"
+    try:
+        from bson import ObjectId
+        from app.core.database import get_database
+        db = get_database()
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        if user:
+            company = user.get("company_name") or user.get("company") or user.get("organization")
+            name = user.get("name") or user.get("full_name")
+            email = user.get("email")
+            if company and company.strip():
+                return f"Client - {company.strip()}"
+            if name and name.strip():
+                return f"Client - {name.strip()}"
+            if email and email.strip():
+                return f"Client - {email.strip()}"
+    except Exception as exc:
+        logger.debug("Could not resolve client name for form %s: %s", form.get("form_id"), exc)
+    return "General Workspace"
 
 
 def _iter_submission_pdf_targets(submissions, selected_pdfs=None):
@@ -406,12 +432,16 @@ def submit_form(form_id):
 
                 from app.projects.analyzer.services import google_drive
                 try:
-                    vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"))
+                    client_name = _get_client_name_for_form(form)
+                    vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"), client_name=client_name)
                     storage._forms_collection().update_one(
                         {"form_id": form_id},
                         {"$set": {
                             "vault_folder_id": vault_info["form_folder_id"],
                             "vault_folder_url": vault_info["folder_url"],
+                            "vault_client_folder_id": vault_info.get("client_folder_id"),
+                            "vault_resumes_folder_id": vault_info.get("resumes_folder_id"),
+                            "vault_excel_folder_id": vault_info.get("excel_folder_id"),
                         }},
                     )
                     drive_uploaded = google_drive.upload_resume_stream(
@@ -442,9 +472,10 @@ def submit_form(form_id):
     def _sync_vault_excel():
         try:
             from app.projects.analyzer.services import google_drive
-            vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"))
+            client_name = _get_client_name_for_form(form)
+            vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"), client_name=client_name)
             excel_bytes = storage.export_to_excel_bytes(form_id)
-            google_drive.sync_excel_stream(vault_info["form_folder_id"], excel_bytes, form.get("name"))
+            google_drive.sync_excel_stream(vault_info["excel_folder_id"], excel_bytes, form.get("name"))
         except Exception as exc:
             logger.debug("Could not sync live Excel to Vault: %s", exc)
 
@@ -608,7 +639,8 @@ def share_form_drive(form_id):
             return jsonify({"error": "Email address is required."}), 400
 
         from app.projects.analyzer.services import google_drive
-        vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"))
+        client_name = _get_client_name_for_form(form)
+        vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"), client_name=client_name)
         
         shared = google_drive.share_folder_with_email(vault_info["form_folder_id"], email, role="writer")
 
@@ -620,6 +652,9 @@ def share_form_drive(form_id):
                 "$set": {
                     "vault_folder_id": vault_info["form_folder_id"],
                     "vault_folder_url": vault_info["folder_url"],
+                    "vault_client_folder_id": vault_info.get("client_folder_id"),
+                    "vault_resumes_folder_id": vault_info.get("resumes_folder_id"),
+                    "vault_excel_folder_id": vault_info.get("excel_folder_id"),
                 }
             }
         )
@@ -652,13 +687,17 @@ def get_form_drive_info(form_id):
         if not folder_url:
             try:
                 from app.projects.analyzer.services import google_drive
-                vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"))
+                client_name = _get_client_name_for_form(form)
+                vault_info = google_drive.ensure_vault_form_structure(form_id, form.get("name"), client_name=client_name)
                 folder_url = vault_info["folder_url"]
                 storage._forms_collection().update_one(
                     {"form_id": form_id},
                     {"$set": {
                         "vault_folder_id": vault_info["form_folder_id"],
                         "vault_folder_url": vault_info["folder_url"],
+                        "vault_client_folder_id": vault_info.get("client_folder_id"),
+                        "vault_resumes_folder_id": vault_info.get("resumes_folder_id"),
+                        "vault_excel_folder_id": vault_info.get("excel_folder_id"),
                     }}
                 )
             except Exception as exc:

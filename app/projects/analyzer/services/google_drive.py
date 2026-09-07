@@ -350,26 +350,46 @@ def ensure_folder(service, parent_id: Optional[str], folder_name: str) -> str:
     return created["id"]
 
 
-def ensure_vault_form_structure(form_id: str, form_title: Optional[str] = None) -> Dict[str, Any]:
+def ensure_vault_form_structure(
+    form_id: str,
+    form_title: Optional[str] = None,
+    client_name: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Ensures the folder hierarchy exists in the Master Google Drive Vault:
-    LeadsPro Cloud Vault / [Form Title] / Resumes
+    Ensures the hierarchical folder structure exists in the Google Drive Master Vault:
+    VisionAI Master Vault / [Client / Organization] / [Form Title] /
+        ├── Resumes/       (Candidate PDF resumes)
+        └── Excel_Reports/ (Candidate intelligence & evaluation spreadsheets)
     """
     service = get_master_drive_service()
     if not service:
         raise RuntimeError("Master Google Drive Vault is not connected. Please authorize the Master Vault account first.")
 
+    # 1. Master Root Vault
     root_id = ensure_folder(service, None, VAULT_ROOT_NAME)
+
+    # 2. Client / Organization Workspace Folder
+    clean_client = (client_name or "General Workspace").strip()
+    client_folder_id = ensure_folder(service, root_id, clean_client)
+
+    # 3. Specific Form / Job Role Folder
     title = (form_title.strip() if form_title else f"Form {form_id}")
-    form_folder_id = ensure_folder(service, root_id, title)
+    form_folder_id = ensure_folder(service, client_folder_id, title)
+
+    # 4. Separated Sub-Folders: Resumes and Excel Reports
     resumes_folder_id = ensure_folder(service, form_folder_id, "Resumes")
+    excel_folder_id = ensure_folder(service, form_folder_id, "Excel_Reports")
 
     folder_url = f"https://drive.google.com/drive/folders/{form_folder_id}"
+    client_folder_url = f"https://drive.google.com/drive/folders/{client_folder_id}"
 
     return {
         "root_id": root_id,
+        "client_folder_id": client_folder_id,
+        "client_folder_url": client_folder_url,
         "form_folder_id": form_folder_id,
         "resumes_folder_id": resumes_folder_id,
+        "excel_folder_id": excel_folder_id,
         "folder_url": folder_url,
     }
 
@@ -436,19 +456,19 @@ def download_file_bytes(file_id: str) -> bytes:
 
 
 def sync_excel_stream(
-    form_folder_id: str,
+    target_folder_id: str,
     excel_bytes: bytes,
     form_title: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Uploads or updates the live submissions spreadsheet in the form folder from in-memory bytes.
+    Uploads or updates the live submissions spreadsheet in the Excel_Reports folder from in-memory bytes.
     """
     service = get_master_drive_service()
     if not service:
         return None
 
     spreadsheet_name = f"{(form_title or 'Submissions').strip()}_Submissions.xlsx"
-    query = f"'{form_folder_id}' in parents and name = '{spreadsheet_name}' and trashed = false"
+    query = f"'{target_folder_id}' in parents and name = '{spreadsheet_name}' and trashed = false"
 
     response = service.files().list(
         q=query,
@@ -477,7 +497,7 @@ def sync_excel_stream(
     else:
         file_metadata = {
             "name": spreadsheet_name,
-            "parents": [form_folder_id],
+            "parents": [target_folder_id],
         }
         created = service.files().create(
             body=file_metadata,
