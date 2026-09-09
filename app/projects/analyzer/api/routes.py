@@ -459,7 +459,11 @@ def submit_form(form_id):
                     logger.error("Failed uploading resume to Google Drive Vault: %s", exc)
                     error_msg = str(exc)
                     if "storageQuotaExceeded" in error_msg:
-                        error_msg = "Google Drive storage quota is exceeded on the master account. Please free up space in Google Drive."
+                        error_msg = "Google Drive storage quota is exceeded on the connected account. Please free up space in Google Drive."
+                    elif "invalid_grant" in error_msg or "expired or revoked" in error_msg:
+                        error_msg = "Google Drive authorization has expired or was revoked. Please reconnect Google Drive in the dashboard to restore resume upload capabilities."
+                    elif "not connected" in error_msg.lower():
+                        error_msg = "Google Drive is not connected. Please connect Google Drive in the dashboard to enable file uploads."
                     return jsonify({"error": f"Failed to stream resume to Google Drive: {error_msg}"}), 500
             else:
                 submission[field_name] = json_body.get(field_name, "")

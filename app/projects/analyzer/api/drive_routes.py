@@ -16,8 +16,11 @@ def get_auth_url():
     try:
         user = get_current_user()
         user_id = str(user["_id"])
-        url = google_drive.get_authorization_url(user_id)
-        return jsonify({"auth_url": url}), 200
+        custom_redirect = request.args.get("redirect_uri")
+        url = google_drive.get_authorization_url(user_id, redirect_uri=custom_redirect)
+        effective_uri = custom_redirect or os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+        logger.info("[Drive OAuth] Generated authorization URL for user %s with redirect_uri=%s", user_id, effective_uri)
+        return jsonify({"auth_url": url, "redirect_uri": effective_uri}), 200
     except Exception as exc:
         logger.error("Failed generating Google auth URL: %s", exc)
         return jsonify({"error": str(exc)}), 500

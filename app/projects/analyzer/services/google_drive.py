@@ -30,11 +30,12 @@ SCOPES = [
 VAULT_ROOT_NAME = "LeadsPro Cloud Vault"
 
 
-def _get_client_config() -> Dict[str, Any]:
+def _get_client_config(redirect_uri: Optional[str] = None) -> Dict[str, Any]:
     """Builds the Google OAuth client config dictionary from environment variables."""
     client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
-    redirect_uri = os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+    if not redirect_uri:
+        redirect_uri = os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
 
     if not client_id or not client_secret:
         raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured in environment variables.")
@@ -50,10 +51,11 @@ def _get_client_config() -> Dict[str, Any]:
     }
 
 
-def get_authorization_url(user_id: str) -> str:
+def get_authorization_url(user_id: str, redirect_uri: Optional[str] = None) -> str:
     """Generates the Google OAuth 2.0 authorization URL for a user."""
-    client_config = _get_client_config()
-    redirect_uri = os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+    if not redirect_uri:
+        redirect_uri = os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+    client_config = _get_client_config(redirect_uri=redirect_uri)
 
     flow = Flow.from_client_config(
         client_config,
@@ -68,13 +70,13 @@ def get_authorization_url(user_id: str) -> str:
         state=user_id,
     )
 
-    # Persist PKCE code_verifier so the callback can successfully fetch the token
+    # Persist PKCE code_verifier and redirect_uri so the callback can successfully fetch the token
     if flow.code_verifier:
         db = get_database()
         try:
             db.system_settings.update_one(
                 {"key": f"oauth_verifier_{user_id}"},
-                {"$set": {"verifier": flow.code_verifier, "created_at": datetime.utcnow()}},
+                {"$set": {"verifier": flow.code_verifier, "redirect_uri": redirect_uri, "created_at": datetime.utcnow()}},
                 upsert=True,
             )
         except Exception as exc:
@@ -83,26 +85,28 @@ def get_authorization_url(user_id: str) -> str:
     return auth_url
 
 
-def exchange_code_for_tokens(user_id: str, code: str) -> Dict[str, Any]:
+def exchange_code_for_tokens(user_id: str, code: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
     """Exchanges authorization code for tokens and saves them in system settings and user doc."""
-    client_config = _get_client_config()
-    redirect_uri = os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+    db = get_database()
+    code_verifier = None
+    stored_redirect_uri = None
+    try:
+        verifier_doc = db.system_settings.find_one({"key": f"oauth_verifier_{user_id}"})
+        if verifier_doc:
+            code_verifier = verifier_doc.get("verifier")
+            stored_redirect_uri = verifier_doc.get("redirect_uri")
+            db.system_settings.delete_one({"key": f"oauth_verifier_{user_id}"})
+    except Exception as exc:
+        logger.warning("Could not retrieve oauth code_verifier: %s", exc)
+
+    effective_redirect_uri = redirect_uri or stored_redirect_uri or os.getenv("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/drive/callback").strip()
+    client_config = _get_client_config(redirect_uri=effective_redirect_uri)
 
     flow = Flow.from_client_config(
         client_config,
         scopes=SCOPES,
-        redirect_uri=redirect_uri,
+        redirect_uri=effective_redirect_uri,
     )
-
-    db = get_database()
-    code_verifier = None
-    try:
-        verifier_doc = db.system_settings.find_one({"key": f"oauth_verifier_{user_id}"})
-        if verifier_doc and verifier_doc.get("verifier"):
-            code_verifier = verifier_doc["verifier"]
-            db.system_settings.delete_one({"key": f"oauth_verifier_{user_id}"})
-    except Exception as exc:
-        logger.warning("Could not retrieve oauth code_verifier: %s", exc)
 
     if code_verifier:
         flow.fetch_token(code=code, code_verifier=code_verifier)
@@ -227,22 +231,26 @@ def get_master_credentials() -> Optional[Credentials]:
                 client_secret=setting.get("client_secret", os.getenv("GOOGLE_CLIENT_SECRET")),
                 scopes=SCOPES,
             )
-            if creds.expired and creds.refresh_token:
+            if creds.refresh_token:
                 try:
-                    creds.refresh(Request())
-                    db.system_settings.update_one(
-                        {"key": "master_google_drive"},
-                        {"$set": {"token": creds.token}},
-                    )
+                    # Always verify and refresh if expired or about to expire
+                    if not creds.valid or creds.expired:
+                        creds.refresh(Request())
+                        db.system_settings.update_one(
+                            {"key": "master_google_drive"},
+                            {"$set": {"token": creds.token}},
+                        )
                 except RefreshError as r_err:
                     logger.warning("Revoked Master OAuth token ('invalid_grant'). Purging: %s", r_err)
                     db.system_settings.delete_one({"key": "master_google_drive"})
                     creds = None
                 except Exception as exc:
                     logger.warning("Failed refreshing Master Vault OAuth token: %s", exc)
+                    if "invalid_grant" in str(exc):
+                        db.system_settings.delete_one({"key": "master_google_drive"})
                     creds = None
 
-            if creds and not creds.expired:
+            if creds and creds.valid:
                 return creds
     except Exception as exc:
         logger.debug("Could not read system_settings for master creds: %s", exc)
