@@ -33,6 +33,8 @@ def auth_required(f):
         auth_header = request.headers.get('Authorization')
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
+        elif request.args.get('token'):
+            token = request.args.get('token')
         
         if not token:
             return jsonify({'error': 'Authorization required'}), 401

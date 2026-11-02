@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -12,7 +15,11 @@ class Config:
     MAX_LEADS_PER_JOB = int(os.environ.get('MAX_LEADS_PER_JOB', 500))
     JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', 24))
     USE_GEMINI = os.environ.get('USE_GEMINI', 'false').lower() in ('true', '1', 'yes')
-    AI_MAX_TOKENS = int(os.environ.get('AI_MAX_TOKENS', 2048))
+    AI_MAX_TOKENS = int(os.environ.get('AI_MAX_TOKENS', 4096))
+    VERTEX_API_KEY = os.environ.get('VERTEX_API_KEY', '')
+    VERTEX_PROJECT_ID = os.environ.get('VERTEX_PROJECT_ID', 'fir-learningwebapp')
+    VERTEX_IMAGE_LOCATION = os.environ.get('VERTEX_IMAGE_LOCATION', 'us-central1')
+    VERTEX_MODEL = os.environ.get('VERTEX_MODEL', 'gemini-2.5-flash')
     GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
     GROQ_MODEL = os.environ.get('GROQ_MODEL', 'openai/gpt-oss-120b')
     GROQ_BASE_URL = os.environ.get('GROQ_BASE_URL', 'https://api.groq.com/openai/v1/chat/completions')
@@ -25,4 +32,8 @@ class Config:
     GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
     ANALYZER_UPLOAD_DIR = os.environ.get('ANALYZER_UPLOAD_DIR', 'uploads/analyzer')
+    MILVUS_HOST = os.environ.get('MILVUS_HOST', 'localhost')
+    MILVUS_PORT = int(os.environ.get('MILVUS_PORT', 19530))
+    VIP_SIMILARITY_THRESHOLD = float(os.environ.get('VIP_SIMILARITY_THRESHOLD', 0.65))
+    VIP_COOLDOWN_MINUTES = int(os.environ.get('VIP_COOLDOWN_MINUTES', 30))
     DEBUG = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'

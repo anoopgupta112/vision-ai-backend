@@ -74,8 +74,26 @@ services:
       - platform_network
       - shared_db_network
 
+  milvus:
+    image: milvusdb/milvus:v2.4.10
+    container_name: platform_milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: "local"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    networks:
+      - platform_network
+
 volumes:
   redis_data:
+  milvus_data:
 
 networks:
   platform_network:

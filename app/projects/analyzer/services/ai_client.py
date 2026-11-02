@@ -22,15 +22,15 @@ def complete_chat(
     temperature: float = 0.0,
     max_tokens: Optional[int] = None,
 ) -> str:
-    # 1. Primary: Groq API
-    if _get_config("GROQ_API_KEY"):
+    # 1. Vertex AI
+    if _get_config("VERTEX_API_KEY"):
         try:
-            from app.clients import groq_client
-            return groq_client.complete_chat(prompt, model, temperature, max_tokens)
+            from app.clients import vertex_client
+            return vertex_client.complete_chat(prompt, model or _get_config("VERTEX_MODEL"), temperature, max_tokens)
         except Exception as exc:
-            raise AIClientError(f"Groq client error: {exc}") from exc
+            raise AIClientError(f"Vertex AI client error: {exc}") from exc
 
-    # 2. Fallback: Gemini
+    # 2. Gemini
     if _get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1"):
         try:
             from app.clients import gemini_client
@@ -38,12 +38,22 @@ def complete_chat(
         except Exception as exc:
             raise AIClientError(f"Gemini client error: {exc}") from exc
 
-    raise AIClientError("No active AI provider configured (GROQ_API_KEY is required).")
+    # 3. Groq API
+    if _get_config("GROQ_API_KEY"):
+        try:
+            from app.clients import groq_client
+            return groq_client.complete_chat(prompt, model, temperature, max_tokens)
+        except Exception as exc:
+            raise AIClientError(f"Groq client error: {exc}") from exc
+
+    raise AIClientError("No active AI provider configured (VERTEX_API_KEY or GEMINI_API_KEY is required).")
 
 
 def get_current_provider() -> str:
-    if _get_config("GROQ_API_KEY"):
-        return "Groq"
     if _get_config("GEMINI_API_KEY") or _get_config("GEMINI_API_KEY_1"):
         return "Gemini"
+    if _get_config("VERTEX_API_KEY"):
+        return "Vertex AI"
+    if _get_config("GROQ_API_KEY"):
+        return "Groq"
     return "OpenRouter"
